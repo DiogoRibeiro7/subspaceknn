@@ -17,7 +17,8 @@ def test_one_explanation_per_sample(fitted):
     explanations = clf.explain(X[:7])
     assert len(explanations) == 7
     assert all(isinstance(explanation, Explanation) for explanation in explanations)
-    assert all(len(explanation.votes) == 4 for explanation in explanations)
+    assert 1 <= len(clf.subspaces_) <= 4
+    assert all(len(explanation.votes) == len(clf.subspaces_) for explanation in explanations)
 
 
 def test_votes_are_ordered_by_weight_and_match_the_ensemble(fitted):
@@ -60,7 +61,7 @@ def test_unanimous_hard_votes_give_full_agreement():
 def test_records_are_dataframe_ready(fitted):
     clf, X, _ = fitted
     records = clf.explain(X[:1])[0].to_records()
-    assert len(records) == 4
+    assert len(records) == len(clf.subspaces_)
     expected_keys = {"features", "score", "weight", "prediction", "agrees", "p(0)", "p(1)", "p(2)"}
     assert all(set(record) == expected_keys for record in records)
     assert all(isinstance(record["agrees"], bool) for record in records)

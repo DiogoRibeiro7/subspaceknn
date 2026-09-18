@@ -80,7 +80,7 @@ One panel per subspace: a strip plot with decision intervals for one feature, a 
 
    and the prediction is the class with the largest probability. `voting="hard"` replaces `p_S` by the one-hot prediction of each subspace, both in selection and in prediction.
 
-With `selection="ranked"` step 3 is replaced by ikNN-style ranking: the `n_subspaces` best candidates by individual score, weighted by that score or uniformly. Everything is deterministic: candidates are enumerated in a fixed order, leave-one-out needs no random split, and ties go to the candidate enumerated first.
+With `selection="ranked"` step 3 is replaced by ikNN-style ranking: the `n_subspaces` best candidates by individual score, weighted by that score or uniformly. Selection does not depend on a random seed: candidates are enumerated in a fixed order, leave-one-out needs no random split, and ties go to the candidate enumerated first. As in scikit-learn's own kNN, which of several equidistant points counts as the k-th neighbour is up to the neighbour search, and it can differ between platforms; on data with many repeated values, such as iris, the chosen subspaces can differ too.
 
 The full description, with the reasoning behind each choice, the cost, and the relation to prior work, is in [docs/method.md](docs/method.md).
 

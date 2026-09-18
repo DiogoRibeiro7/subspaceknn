@@ -51,7 +51,9 @@ Because `predict` is defined as the argmax of `predict_proba`, the two are consi
 
 **Why the best prefix.** The search runs `max_votes` steps and keeps the best ensemble it passed through, so a late step that makes the ensemble worse is never kept. The loss after each kept vote is exposed as `selection_path_`.
 
-**Why leave-one-out.** Besides being cheaper than k-fold cross-validation for kNN, leave-one-out uses every sample for every candidate and needs no random split, so selection is deterministic and does not depend on a seed.
+**Why leave-one-out.** Besides being cheaper than k-fold cross-validation for kNN, leave-one-out uses every sample for every candidate and needs no random split, so selection does not depend on a seed.
+
+**Equidistant neighbours.** When several training points lie at exactly the distance of the k-th neighbour, which of them counts is left to scikit-learn's neighbour search, as it is in `KNeighborsClassifier`. The tree that search builds partitions points with the platform's C++ standard library, so the choice, and with it the out-of-fold votes, can differ between operating systems. On data with many repeated values this is common: on iris, rounded to one decimal, more than half of the samples have such a tie at the fifth neighbour in every one-feature subspace, and the selected subspaces differ between Linux and macOS. On continuous data exact ties are rare, so this seldom matters.
 
 ### What "complementary" means here
 
