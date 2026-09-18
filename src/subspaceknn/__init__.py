@@ -13,4 +13,4 @@ from subspaceknn._classifier import SubspaceKNNClassifier
 from subspaceknn._explanation import Explanation, SubspaceVote
 
 __all__ = ["Explanation", "SubspaceKNNClassifier", "SubspaceVote"]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

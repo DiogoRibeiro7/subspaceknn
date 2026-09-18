@@ -4,7 +4,7 @@
 [![Docs](https://github.com/DiogoRibeiro7/subspaceknn/actions/workflows/docs.yml/badge.svg)](https://diogoribeiro7.github.io/subspaceknn/)
 [![PyPI](https://img.shields.io/pypi/v/subspaceknn)](https://pypi.org/project/subspaceknn/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://github.com/DiogoRibeiro7/subspaceknn)
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/DiogoRibeiro7/subspaceknn/blob/main/LICENSE)
 
 Interpretable k-nearest-neighbour classification by complementary selection of low-dimensional feature subspaces.
 
@@ -85,7 +85,7 @@ One panel per subspace: a strip plot with decision intervals for one feature, a 
 
 With `selection="ranked"` step 3 is replaced by ikNN-style ranking: the `n_subspaces` best candidates by individual score, weighted by that score or uniformly. Selection does not depend on a random seed: candidates are enumerated in a fixed order, leave-one-out needs no random split, and ties go to the candidate enumerated first. As in scikit-learn's own kNN, which of several equidistant points counts as the k-th neighbour is up to the neighbour search, and it can differ between platforms; on data with many repeated values, such as iris, the chosen subspaces can differ too.
 
-The full description, with the reasoning behind each choice, the cost, and the relation to prior work, is in [docs/method.md](docs/method.md).
+The full description, with the reasoning behind each choice, the cost, and the relation to prior work, is in [docs/method.md](https://diogoribeiro7.github.io/subspaceknn/method/).
 
 ## Parameters
 
@@ -116,14 +116,14 @@ Macro-F1 under 5-fold stratified cross-validation repeated three times, features
 | pairs, 3 subspaces | 0.785 | 0.757 | 0.777 |
 | sizes 1, 2 and 3, 8 subspaces | 0.785 | 0.772 | **0.798** |
 
-With pairs the ensemble stays within a point of plain kNN while every vote is a scatter plot, and three complementary pairs do better than five ranked ones. With subspaces of up to three features it beats plain kNN on average, on seven datasets out of fourteen, and loses on four. Complementary selection improves on ranking in every setting, and with mixed sizes it is at least as good on every dataset, to within half a point. Per-dataset results, an ablation separating the two ingredients, and fit times are in [docs/benchmark.md](docs/benchmark.md); `benchmarks/run_benchmark.py` reproduces them.
+With pairs the ensemble stays within a point of plain kNN while every vote is a scatter plot, and three complementary pairs do better than five ranked ones. With subspaces of up to three features it beats plain kNN on average, on seven datasets out of fourteen, and loses on four. Complementary selection improves on ranking in every setting, and with mixed sizes it is at least as good on every dataset, to within half a point. Per-dataset results, an ablation separating the two ingredients, and fit times are in [docs/benchmark.md](https://diogoribeiro7.github.io/subspaceknn/benchmark/); `benchmarks/run_benchmark.py` reproduces them.
 
 ## Limitations
 
 - Features must be numeric and are used as given; encode categorical features and scale everything first.
 - Candidate subspaces grow as the binomial coefficient of the feature count; rely on `max_candidates` or a sequence of small sizes for wide data. Screening by one-dimensional scores can miss features that only matter in combination.
 - Complementary selection stores every candidate's out-of-fold probabilities, `max_candidates * n_samples * n_classes` floats; lower `max_candidates` for large training sets.
-- Complementary means complementary under probability averaging: a weak but independent signal can lower the averaged Brier score and be left out. See [docs/method.md](docs/method.md#what-complementary-means-here).
+- Complementary means complementary under probability averaging: a weak but independent signal can lower the averaged Brier score and be left out. See [docs/method.md](https://diogoribeiro7.github.io/subspaceknn/method/#what-complementary-means-here).
 - The voting weights are vote shares, not calibrated probabilities. Treat `predict_proba` as a ranking unless you calibrate it.
 - Classification only.
 
@@ -139,7 +139,7 @@ uv run pytest
 uv run --group docs mkdocs serve    # documentation at http://127.0.0.1:8000
 ```
 
-The test suite runs scikit-learn's estimator contract (`check_estimator`) against three configurations, plus behavioural, explanation, plotting and benchmark tests. See [CONTRIBUTING.md](CONTRIBUTING.md).
+The test suite runs scikit-learn's estimator contract (`check_estimator`) against three configurations, plus behavioural, explanation, plotting and benchmark tests. See [CONTRIBUTING.md](https://github.com/DiogoRibeiro7/subspaceknn/blob/main/CONTRIBUTING.md).
 
 ## References
 
@@ -152,4 +152,4 @@ The test suite runs scikit-learn's estimator contract (`check_estimator`) agains
 
 ## License and attribution
 
-MIT, see [LICENSE](LICENSE). The ensemble of drawable kNN models follows Brett Kennedy's ikNN (Kennedy, 2024); complementary selection, the leave-one-out scoring and everything in this repository were written independently and share no code with it.
+MIT, see [LICENSE](https://github.com/DiogoRibeiro7/subspaceknn/blob/main/LICENSE). The ensemble of drawable kNN models follows Brett Kennedy's ikNN (Kennedy, 2024); complementary selection, the leave-one-out scoring and everything in this repository were written independently and share no code with it.
