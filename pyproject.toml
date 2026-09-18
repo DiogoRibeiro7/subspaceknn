@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "subspaceknn"
 version = "0.1.0"
-description = "Interpretable k-nearest-neighbour classification by ensembling kNN models fitted on low-dimensional feature subspaces."
+description = "Interpretable k-nearest-neighbour classification by complementary selection of low-dimensional feature subspaces."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -17,6 +17,7 @@ keywords = [
   "interpretable-machine-learning",
   "explainability",
   "ensemble",
+  "ensemble-selection",
   "scikit-learn",
 ]
 classifiers = [
@@ -66,7 +67,7 @@ exclude = ["/.github", "/docs/results", "/examples/output"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-src = ["src", "tests", "examples"]
+src = ["src", "tests", "examples", "benchmarks"]
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -86,6 +87,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D", "S101", "PLR2004", "ANN", "INP001", "SLF001", "FBT003", "T201"]
 "examples/**" = ["D", "T201", "INP001", "PLR2004"]
+"benchmarks/**" = ["D", "T201", "INP001"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

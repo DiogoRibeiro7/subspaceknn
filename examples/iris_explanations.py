@@ -32,6 +32,16 @@ def main() -> None:
         names = ", ".join(X.columns[list(subspace)])
         print(f"  {names:<40s} score {score:.3f}   weight {weight:.3f}")
 
+    print("\nwhen each subspace joined, with the out-of-fold loss after that vote:")
+    joined = set()
+    for vote, (subspace, loss) in enumerate(clf.selection_path_, start=1):
+        if subspace not in joined:
+            joined.add(subspace)
+            names = ", ".join(X.columns[list(subspace)])
+            print(f"  vote {vote:>2d}: {names:<38s} loss {loss:.4f}")
+    final_loss = clf.selection_path_[-1][1]
+    print(f"  best ensemble after {len(clf.selection_path_)} votes, loss {final_loss:.4f}")
+
     explanation = clf.explain(X_test.iloc[:1])[0]
     print(
         f"\nfirst test sample: true={y_test[0]} predicted={explanation.prediction} "

@@ -1,5 +1,7 @@
 """Cross-validated macro-F1 of subspace ensembles against plain kNN on toy datasets.
 
+For the full benchmark on fourteen datasets, run benchmarks/run_benchmark.py.
+
 Run with: uv run python examples/compare_with_knn.py
 """
 
@@ -14,7 +16,8 @@ from subspaceknn import SubspaceKNNClassifier
 DATASETS = {"iris": load_iris, "wine": load_wine, "breast_cancer": load_breast_cancer}
 MODELS = {
     "kNN": KNeighborsClassifier(),
-    "pairs": SubspaceKNNClassifier(subspace_size=2),
+    "ranked": SubspaceKNNClassifier(selection="ranked"),
+    "pairs": SubspaceKNNClassifier(),
     "sizes 1-3": SubspaceKNNClassifier(subspace_size=(1, 2, 3), n_subspaces=8),
 }
 
