@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-18
+
 ### Added
 
 - Documentation site built with MkDocs and Material for MkDocs, published to GitHub Pages: a user guide, the method and benchmark notes, an API reference generated from the docstrings, and the changelog.
@@ -18,8 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The ikNN-style behaviour of 0.1.0 is now `selection="ranked"`; `SubspaceKNNClassifier(selection="ranked", cv=5, max_candidates=100)` reproduces the 0.1.0 configuration up to how subspace scores are averaged (next item).
-- Subspace scores are computed on pooled out-of-fold predictions rather than averaged over folds, so any scorer works, including probability-based ones. A splitter passed as `cv` must partition the samples.
+- **Breaking:** complementary selection and leave-one-out scoring are the new defaults, so `SubspaceKNNClassifier()` selects different subspaces and makes different predictions than in 0.1.0. On the fourteen benchmark datasets, mean macro-F1 with the default pairs moves from 0.762 to 0.780; `docs/benchmark.md` has the per-dataset numbers. The ikNN-style behaviour of 0.1.0 is now `selection="ranked"`, and `SubspaceKNNClassifier(selection="ranked", cv=5, max_candidates=100)` reproduces the 0.1.0 configuration up to how subspace scores are averaged (next item).
+- **Breaking:** subspace scores are computed on pooled out-of-fold predictions rather than averaged over folds, so any scorer works, including probability-based ones. A splitter passed as `cv` must partition the samples; one that leaves samples out, such as `ShuffleSplit`, now raises a `ValueError`.
 - `max_candidates` defaults to 1000 instead of 100, which the cheaper scoring makes affordable.
 - `weighting` applies to ranked selection only; complementary selection weights by vote counts.
 - Plot panel titles show each subspace's weight next to its score.
@@ -34,5 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite covering scikit-learn's estimator contract for two configurations, behaviour, explanations, plotting, and an accuracy comparison against plain kNN on the iris, wine and breast-cancer datasets.
 - Project infrastructure: uv-based workflow, ruff and mypy in strict mode, CI across Python 3.10 to 3.13 and three operating systems, tag-driven PyPI release with trusted publishing, Dependabot, issue and pull request templates, contributing guide, security policy and code of conduct.
 
-[Unreleased]: https://github.com/DiogoRibeiro7/subspaceknn/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/DiogoRibeiro7/subspaceknn/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/DiogoRibeiro7/subspaceknn/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/DiogoRibeiro7/subspaceknn/releases/tag/v0.1.0
