@@ -139,7 +139,7 @@ uv run pytest
 uv run --group docs mkdocs serve    # documentation at http://127.0.0.1:8000
 ```
 
-The test suite runs scikit-learn's estimator contract (`check_estimator`) against three configurations, plus behavioural, explanation, plotting and benchmark tests. See [CONTRIBUTING.md](https://github.com/DiogoRibeiro7/subspaceknn/blob/main/CONTRIBUTING.md).
+The test suite runs scikit-learn's estimator contract (`check_estimator`) against three configurations, plus behavioural, explanation, plotting and benchmark tests. See [CONTRIBUTING.md](https://github.com/DiogoRibeiro7/subspaceknn/blob/main/CONTRIBUTING.md). The [roadmap](https://github.com/DiogoRibeiro7/subspaceknn/blob/main/ROADMAP.md) lists the milestones to 1.0.0.
 
 ## References
 

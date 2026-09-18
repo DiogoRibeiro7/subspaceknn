@@ -14,6 +14,7 @@ nav:
   - Benchmark: benchmark.md
   - API reference: api.md
   - Changelog: changelog.md
+  - Roadmap: roadmap.md
   - Contributing: https://github.com/DiogoRibeiro7/subspaceknn/blob/main/CONTRIBUTING.md
 
 # The release checklist is for maintainers and links into the repository.
@@ -88,6 +89,8 @@ markdown_extensions:
       base_path: ["."]
       check_paths: true
   - pymdownx.superfences
+  - pymdownx.tasklist:
+      custom_checkbox: true
 
 extra_javascript:
   - javascripts/mathjax.js

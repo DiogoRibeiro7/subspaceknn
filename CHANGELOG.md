@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ROADMAP.md`, also on the documentation site: the milestones to 1.0.0 with exit criteria, measured performance targets and the decisions to take before the API freeze.
+
 ## [0.2.0] - 2026-09-18
 
 ### Added
