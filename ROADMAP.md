@@ -4,6 +4,8 @@
 
 This roadmap lists what has to happen before then. Milestones are ordered by dependency, not by date. Each ends with an exit criterion that can be checked, and every behavioural claim a milestone adds must be backed by a test, as the [contributing guide](https://github.com/DiogoRibeiro7/subspaceknn/blob/main/CONTRIBUTING.md) requires.
 
+Progress is tracked on GitHub: each milestone below from M2 on is a [GitHub milestone](https://github.com/DiogoRibeiro7/subspaceknn/milestones), and every open item links to its issue.
+
 ## Where 0.2.0 stands
 
 What works: complementary selection with exact leave-one-out scoring, the scikit-learn estimator contract on three configurations, structured explanations and plots, a fourteen-dataset benchmark in which the method beats ikNN-style ranking by 1.8 to 2.6 points of mean macro-F1, and a documentation site.
@@ -62,15 +64,15 @@ $$
 
 The total weight is still $k$, and the vote no longer depends on which tied point the search happens to return first.
 
-- [ ] implement the tie rule for leave-one-out votes, with a radius query at $d^\ast$ to find every tied point;
-- [ ] apply the same rule at prediction time, so that `predict_proba` and the out-of-fold votes describe the same model; decide whether `estimators_` stay `KNeighborsClassifier` objects or become a thin wrapper;
-- [ ] extend the rule to `knn_weights="distance"`, where a point at distance zero already takes all the weight;
-- [ ] break ties between candidates in the greedy search with a tolerance, choosing the first enumerated candidate among those within $10^{-12}$ of the best loss, so that summation order cannot flip a choice;
-- [ ] fix the `selection_path_` docstring: the loss is the Brier score weighted as `balance_classes` says;
-- [ ] property-based tests with Hypothesis for the invariants: weights sum to one and are multiples of $1/t^\ast$, the budget holds, `predict` is the argmax of `predict_proba`, and selection is invariant to permuting the rows;
-- [ ] a CI job that fits the default model on iris, wine, breast cancer and a rounded synthetic dataset on Linux, macOS and Windows and compares `subspaces_`, `subspace_weights_` and `predict_proba` with a committed fixture;
-- [ ] a CI job with the lowest supported versions of numpy and scikit-learn (`uv sync --resolution lowest-direct`);
-- [ ] add Python 3.14 to CI and the classifiers.
+- [ ] implement the tie rule for leave-one-out votes, with a radius query at $d^\ast$ to find every tied point ([#11](https://github.com/DiogoRibeiro7/subspaceknn/issues/11));
+- [ ] apply the same rule at prediction time, so that `predict_proba` and the out-of-fold votes describe the same model; decide whether `estimators_` stay `KNeighborsClassifier` objects or become a thin wrapper ([#12](https://github.com/DiogoRibeiro7/subspaceknn/issues/12));
+- [ ] extend the rule to `knn_weights="distance"`, where a point at distance zero already takes all the weight ([#13](https://github.com/DiogoRibeiro7/subspaceknn/issues/13));
+- [ ] break ties between candidates in the greedy search with a tolerance, choosing the first enumerated candidate among those within $10^{-12}$ of the best loss, so that summation order cannot flip a choice ([#14](https://github.com/DiogoRibeiro7/subspaceknn/issues/14));
+- [ ] fix the `selection_path_` docstring: the loss is the Brier score weighted as `balance_classes` says ([#15](https://github.com/DiogoRibeiro7/subspaceknn/issues/15));
+- [ ] property-based tests with Hypothesis for the invariants: weights sum to one and are multiples of $1/t^\ast$, the budget holds, `predict` is the argmax of `predict_proba`, and selection is invariant to permuting the rows ([#16](https://github.com/DiogoRibeiro7/subspaceknn/issues/16));
+- [ ] a CI job that fits the default model on iris, wine, breast cancer and a rounded synthetic dataset on Linux, macOS and Windows and compares `subspaces_`, `subspace_weights_` and `predict_proba` with a committed fixture ([#17](https://github.com/DiogoRibeiro7/subspaceknn/issues/17));
+- [ ] a CI job with the lowest supported versions of numpy and scikit-learn (`uv sync --resolution lowest-direct`) ([#18](https://github.com/DiogoRibeiro7/subspaceknn/issues/18));
+- [ ] add Python 3.14 to CI and the classifiers ([#19](https://github.com/DiogoRibeiro7/subspaceknn/issues/19)).
 
 The tie rule changes predictions wherever ties occur, so 0.3.0 is a minor release and the changelog gives the new benchmark numbers, as the versioning policy requires.
 
@@ -80,13 +82,13 @@ Exit criterion: the fixture job passes on all three operating systems, selection
 
 Goal: fits that are fast and small enough for tens of thousands of samples, and a candidate pool that does not discard interacting features.
 
-- [ ] compute the built-in scores (`f1_macro`, `accuracy`, `balanced_accuracy`) directly from the out-of-fold votes with a confusion matrix, and keep the scorer adapter for everything else;
-- [ ] evaluate candidates in parallel over `n_jobs` with threads, since the neighbour queries release the GIL;
-- [ ] store votes compactly: `float32` instead of `float64`, and without the last class column, which follows from the others because every vote sums to one; for two classes that is a quarter of the current memory;
-- [ ] replace one-dimensional screening for wide data with candidate growth: score all pairs among a larger screened set, then extend the best pairs to triples, so that a feature that only matters in combination can enter;
-- [ ] a synthetic interaction benchmark (for example XOR of two features among noise features) in which one-dimensional screening fails and candidate growth succeeds;
-- [ ] a performance smoke test in CI with generous bounds, and a scheduled workflow that reruns the full benchmark and fails if a selected subspace changes unexpectedly;
-- [ ] document the time and memory model in the method note, with the measured table.
+- [ ] compute the built-in scores (`f1_macro`, `accuracy`, `balanced_accuracy`) directly from the out-of-fold votes with a confusion matrix, and keep the scorer adapter for everything else ([#20](https://github.com/DiogoRibeiro7/subspaceknn/issues/20));
+- [ ] evaluate candidates in parallel over `n_jobs` with threads, since the neighbour queries release the GIL ([#21](https://github.com/DiogoRibeiro7/subspaceknn/issues/21));
+- [ ] store votes compactly: `float32` instead of `float64`, and without the last class column, which follows from the others because every vote sums to one; for two classes that is a quarter of the current memory ([#22](https://github.com/DiogoRibeiro7/subspaceknn/issues/22));
+- [ ] replace one-dimensional screening for wide data with candidate growth: score all pairs among a larger screened set, then extend the best pairs to triples, so that a feature that only matters in combination can enter ([#24](https://github.com/DiogoRibeiro7/subspaceknn/issues/24));
+- [ ] a synthetic interaction benchmark (for example XOR of two features among noise features) in which one-dimensional screening fails and candidate growth succeeds ([#23](https://github.com/DiogoRibeiro7/subspaceknn/issues/23));
+- [ ] a performance smoke test in CI with generous bounds, and a scheduled workflow that reruns the full benchmark and fails if a selected subspace changes unexpectedly ([#25](https://github.com/DiogoRibeiro7/subspaceknn/issues/25));
+- [ ] document the time and memory model in the method note, with the measured table ([#26](https://github.com/DiogoRibeiro7/subspaceknn/issues/26)).
 
 Targets against the baseline above, on the same machine:
 
@@ -102,12 +104,12 @@ Exit criterion: the targets are met; outside the datasets where candidate growth
 
 Goal: explanations that show the evidence itself, and data that is not perfectly clean.
 
-- [ ] add the neighbours to each `SubspaceVote`: training-set indices and distances of the samples behind the vote, so that an explanation can show the five flowers that decided it;
-- [ ] a feature importance that reflects the vote, the share of weight on the subspaces that contain feature $j$, $I_j = \sum_{S \ni j} w_S$, exposed as `feature_importances_`, with `feature_scores_` deprecated;
-- [ ] missing values at prediction time: a subspace that contains a missing feature abstains, the remaining weights are renormalised, and the explanation marks the abstention; decide whether fitting with missing values is in scope;
-- [ ] `plot_selection_path` for the loss after each vote, and a single-sample explanation figure combining the vote table with the panels;
-- [ ] a documented recipe for categorical features with `ColumnTransformer`, and an example showing how the choice of encoding changes the neighbourhoods;
-- [ ] report, but do not use for weighting, each subspace's out-of-fold accuracy among the explained sample's neighbours; the prototype found that using it as a weight did not improve macro-F1 consistently.
+- [ ] add the neighbours to each `SubspaceVote`: training-set indices and distances of the samples behind the vote, so that an explanation can show the five flowers that decided it ([#28](https://github.com/DiogoRibeiro7/subspaceknn/issues/28));
+- [ ] a feature importance that reflects the vote, the share of weight on the subspaces that contain feature $j$, $I_j = \sum_{S \ni j} w_S$, exposed as `feature_importances_`, with `feature_scores_` deprecated ([#29](https://github.com/DiogoRibeiro7/subspaceknn/issues/29));
+- [ ] missing values at prediction time: a subspace that contains a missing feature abstains, the remaining weights are renormalised, and the explanation marks the abstention; decide whether fitting with missing values is in scope ([#30](https://github.com/DiogoRibeiro7/subspaceknn/issues/30));
+- [ ] `plot_selection_path` for the loss after each vote, and a single-sample explanation figure combining the vote table with the panels ([#31](https://github.com/DiogoRibeiro7/subspaceknn/issues/31));
+- [ ] a documented recipe for categorical features with `ColumnTransformer`, and an example showing how the choice of encoding changes the neighbourhoods ([#32](https://github.com/DiogoRibeiro7/subspaceknn/issues/32));
+- [ ] report, but do not use for weighting, each subspace's out-of-fold accuracy among the explained sample's neighbours; the prototype found that using it as a weight did not improve macro-F1 consistently ([#33](https://github.com/DiogoRibeiro7/subspaceknn/issues/33)).
 
 Exit criterion: every new field is tested against an independent computation (for example the neighbours against `KNeighborsClassifier.kneighbors`), and the user guide shows each feature on real data.
 
@@ -115,13 +117,13 @@ Exit criterion: every new field is tested against an independent computation (fo
 
 Goal: claims about accuracy and interpretability that hold up against the natural alternatives and across many datasets.
 
-- [ ] extend the benchmark to the numeric-feature datasets of the OpenML-CC18 suite, pinned by data id and cached;
-- [ ] add baselines: kNN with tuned `n_neighbors`, depth-limited decision trees, logistic regression, and a black-box reference such as `HistGradientBoostingClassifier`; include explainable boosting machines when the `interpret` package is available;
-- [ ] tune every model, including `n_neighbors` and `subspace_size` here, inside nested cross-validation;
-- [ ] compare methods across datasets with the Friedman test and critical-difference diagrams (Demšar, 2006), rather than counting wins;
-- [ ] measure interpretability, not only accuracy: pictures per explanation, distinct features, agreement, and the stability of the selected subspaces across bootstrap refits;
-- [ ] evaluate the probabilities: Brier score and calibration curves, with and without `CalibratedClassifierCV`;
-- [ ] rerun the benchmark on a schedule and publish the results in the documentation.
+- [ ] extend the benchmark to the numeric-feature datasets of the OpenML-CC18 suite, pinned by data id and cached ([#34](https://github.com/DiogoRibeiro7/subspaceknn/issues/34));
+- [ ] add baselines: kNN with tuned `n_neighbors`, depth-limited decision trees, logistic regression, and a black-box reference such as `HistGradientBoostingClassifier`; include explainable boosting machines when the `interpret` package is available ([#35](https://github.com/DiogoRibeiro7/subspaceknn/issues/35));
+- [ ] tune every model, including `n_neighbors` and `subspace_size` here, inside nested cross-validation ([#36](https://github.com/DiogoRibeiro7/subspaceknn/issues/36));
+- [ ] compare methods across datasets with the Friedman test and critical-difference diagrams (Demšar, 2006), rather than counting wins ([#37](https://github.com/DiogoRibeiro7/subspaceknn/issues/37));
+- [ ] measure interpretability, not only accuracy: pictures per explanation, distinct features, agreement, and the stability of the selected subspaces across bootstrap refits ([#38](https://github.com/DiogoRibeiro7/subspaceknn/issues/38));
+- [ ] evaluate the probabilities: Brier score and calibration curves, with and without `CalibratedClassifierCV` ([#39](https://github.com/DiogoRibeiro7/subspaceknn/issues/39));
+- [ ] rerun the benchmark on a schedule and publish the results in the documentation ([#40](https://github.com/DiogoRibeiro7/subspaceknn/issues/40)).
 
 Exit criterion: `docs/benchmark.md` reports these comparisons with confidence intervals, and every accuracy claim in the README and the documentation comes from them.
 
@@ -129,36 +131,36 @@ Exit criterion: `docs/benchmark.md` reports these comparisons with confidence in
 
 Goal: a public API that can be promised for the whole 1.x series.
 
-- [ ] settle the decisions listed below;
-- [ ] review every public name: parameters, fitted attributes, `Explanation` and `SubspaceVote` fields, and the plotting functions;
-- [ ] warn when a parameter is set that the chosen selection ignores, such as `weighting` under complementary selection;
-- [ ] write the compatibility policy: what 1.x keeps stable (the names in `__all__`, parameter names and defaults, fitted attribute names and shapes, explanation fields) and what it does not (exact floating-point outputs across scikit-learn versions, private modules, pickles across versions);
-- [ ] write the deprecation policy: a deprecated name warns for at least one minor release before it is removed, and removals only happen in a major release after 1.0;
-- [ ] versioned documentation, a migration guide from 0.x, an FAQ and a gallery of worked examples on real datasets;
-- [ ] decide the documentation toolchain: MkDocs 2.0 drops the plugin system the site uses, so either stay on MkDocs 1.6 with Material, whose team now develops a successor, Zensical, or move to Zensical before the docs are versioned;
-- [ ] release 0.9.0 and keep the API unchanged for at least one release cycle while it is used.
+- [ ] settle the decisions listed below ([issues labelled decision](https://github.com/DiogoRibeiro7/subspaceknn/issues?q=label%3Adecision));
+- [ ] review every public name: parameters, fitted attributes, `Explanation` and `SubspaceVote` fields, and the plotting functions ([#45](https://github.com/DiogoRibeiro7/subspaceknn/issues/45));
+- [ ] warn when a parameter is set that the chosen selection ignores, such as `weighting` under complementary selection ([#46](https://github.com/DiogoRibeiro7/subspaceknn/issues/46));
+- [ ] write the compatibility policy: what 1.x keeps stable (the names in `__all__`, parameter names and defaults, fitted attribute names and shapes, explanation fields) and what it does not (exact floating-point outputs across scikit-learn versions, private modules, pickles across versions) ([#47](https://github.com/DiogoRibeiro7/subspaceknn/issues/47));
+- [ ] write the deprecation policy: a deprecated name warns for at least one minor release before it is removed, and removals only happen in a major release after 1.0 ([#48](https://github.com/DiogoRibeiro7/subspaceknn/issues/48));
+- [ ] versioned documentation, a migration guide from 0.x, an FAQ and a gallery of worked examples on real datasets ([#49](https://github.com/DiogoRibeiro7/subspaceknn/issues/49));
+- [ ] decide the documentation toolchain: MkDocs 2.0 drops the plugin system the site uses, so either stay on MkDocs 1.6 with Material, whose team now develops a successor, Zensical, or move to Zensical before the docs are versioned ([#44](https://github.com/DiogoRibeiro7/subspaceknn/issues/44));
+- [ ] release 0.9.0 and keep the API unchanged for at least one release cycle while it is used ([#50](https://github.com/DiogoRibeiro7/subspaceknn/issues/50)).
 
 Exit criterion: 0.9.0 has been out for a full cycle without an API change, and every decision below is recorded in the documentation.
 
 ## M7 — 1.0.0
 
-- [ ] every exit criterion above is met;
-- [ ] Python support follows the published policy: every CPython version that is not end-of-life at release time, which drops 3.10 after its end of life in October 2026;
-- [ ] `Development Status :: 5 - Production/Stable` in the package classifiers;
-- [ ] a conda-forge package;
-- [ ] `CITATION.cff` and an archived, citable release with a DOI;
-- [ ] release notes that summarise everything since 0.2.0 and link the migration guide.
+- [ ] every exit criterion above is met ([#51](https://github.com/DiogoRibeiro7/subspaceknn/issues/51));
+- [ ] Python support follows the published policy: every CPython version that is not end-of-life at release time, which drops 3.10 after its end of life in October 2026 ([#52](https://github.com/DiogoRibeiro7/subspaceknn/issues/52));
+- [ ] `Development Status :: 5 - Production/Stable` in the package classifiers ([#53](https://github.com/DiogoRibeiro7/subspaceknn/issues/53));
+- [ ] a conda-forge package ([#54](https://github.com/DiogoRibeiro7/subspaceknn/issues/54));
+- [ ] `CITATION.cff` and an archived, citable release with a DOI ([#55](https://github.com/DiogoRibeiro7/subspaceknn/issues/55));
+- [ ] release notes that summarise everything since 0.2.0 and link the migration guide ([#56](https://github.com/DiogoRibeiro7/subspaceknn/issues/56)).
 
 ## Decisions before the freeze
 
 | Decision | Options | Recommendation |
 | --- | --- | --- |
-| Regression | In 1.0, or in 1.x | 1.x. The selection carries over with squared error in place of the Brier score, but scoring, weighting and explanation need their own contracts. Keep the 1.0 names general enough not to block it. |
-| `sample_weight` in `fit` | Support fully, support in the selection loss only, or leave out | Support it only if neighbour votes can be weighted consistently with the loss; otherwise leave it out and say so. Half support would make the explanation disagree with the selection. |
-| Parameters that apply to one selection only | Keep the flat parameters and warn, or group them per selection strategy | Keep the flat parameters, which grid search handles well, and warn when an ignored one is set. |
-| Missing values during `fit` | Prediction only, or fitting too | Prediction only for 1.0. Fitting would need out-of-fold votes on incomplete rows, which changes the selection loss. |
-| Tie rule at prediction time | Own implementation, or `KNeighborsClassifier` with a correction | Own implementation behind `estimators_`, if it can keep `kneighbors` available for plotting and explanations. |
-| Documentation toolchain | MkDocs 1.6 with Material, or Zensical | Decide at M6, when versioned docs are needed and Zensical's maturity can be judged. |
+| Regression ([#41](https://github.com/DiogoRibeiro7/subspaceknn/issues/41)) | In 1.0, or in 1.x | 1.x. The selection carries over with squared error in place of the Brier score, but scoring, weighting and explanation need their own contracts. Keep the 1.0 names general enough not to block it. |
+| `sample_weight` in `fit` ([#42](https://github.com/DiogoRibeiro7/subspaceknn/issues/42)) | Support fully, support in the selection loss only, or leave out | Support it only if neighbour votes can be weighted consistently with the loss; otherwise leave it out and say so. Half support would make the explanation disagree with the selection. |
+| Parameters that apply to one selection only ([#43](https://github.com/DiogoRibeiro7/subspaceknn/issues/43)) | Keep the flat parameters and warn, or group them per selection strategy | Keep the flat parameters, which grid search handles well, and warn when an ignored one is set. |
+| Missing values during `fit` ([#27](https://github.com/DiogoRibeiro7/subspaceknn/issues/27)) | Prediction only, or fitting too | Prediction only for 1.0. Fitting would need out-of-fold votes on incomplete rows, which changes the selection loss. |
+| Tie rule at prediction time ([#10](https://github.com/DiogoRibeiro7/subspaceknn/issues/10)) | Own implementation, or `KNeighborsClassifier` with a correction | Own implementation behind `estimators_`, if it can keep `kneighbors` available for plotting and explanations. |
+| Documentation toolchain ([#44](https://github.com/DiogoRibeiro7/subspaceknn/issues/44)) | MkDocs 1.6 with Material, or Zensical | Decide at M6, when versioned docs are needed and Zensical's maturity can be judged. |
 
 ## After 1.0
 
