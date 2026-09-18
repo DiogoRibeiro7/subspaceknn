@@ -99,7 +99,11 @@ def plot_subspaces(
         estimator_index = estimator.subspaces_.index(subspace)
         model = estimator.estimators_[estimator_index]
         score = float(estimator.subspace_scores_[estimator_index])
-        title = f"{', '.join(names[index] for index in subspace)}\nscore {score:.3f}"
+        weight = float(estimator.subspace_weights_[estimator_index])
+        title = (
+            f"{', '.join(names[index] for index in subspace)}\n"
+            f"weight {weight:.2f}, score {score:.3f}"
+        )
         if len(subspace) == 1:
             ax = fig.add_subplot(1, n_panels, panel)
             _draw_1d(
