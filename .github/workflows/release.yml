@@ -1,0 +1,110 @@
+# Tag-driven release: pushing `vX.Y.Z` verifies the tag against pyproject.toml, runs the
+# tests, builds the distribution, publishes it to PyPI through trusted publishing, and
+# creates a GitHub release whose notes are the matching CHANGELOG.md section.
+# If the version is already on PyPI the publish job is skipped and only the GitHub
+# release is created. One-time setup is described in docs/RELEASING.md.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"
+  MPLBACKEND: Agg
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.registry.outputs.published }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.13"
+      - name: Check that the tag matches pyproject.toml
+        id: version
+        run: |
+          version="$(uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag_version" ]; then
+            echo "::error::pyproject.toml version $version does not match tag $tag_version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Check whether this version is already on PyPI
+        id: registry
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          status="$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/subspaceknn/${VERSION}/json")"
+          case "$status" in
+            200) echo "published=true" >> "$GITHUB_OUTPUT"; echo "Version $VERSION is already on PyPI; publishing will be skipped." ;;
+            404) echo "published=false" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Unexpected PyPI response: HTTP $status"; exit 1 ;;
+          esac
+      - run: uv sync --all-extras
+      - run: uv run pytest -p no:cacheprovider
+      - run: uv build
+      - run: uvx twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: verify
+    if: needs.verify.outputs.published == 'false'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/subspaceknn/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: GitHub release
+    needs: [verify, publish]
+    if: always() && needs.verify.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Extract the changelog section for this version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os
+          version = os.environ["TAG"].removeprefix("v")
+          notes, grab = [], False
+          for line in open("CHANGELOG.md", encoding="utf-8").read().splitlines():
+              if line.startswith("## "):
+                  if grab:
+                      break
+                  grab = line.startswith("## [" + version + "]")
+                  continue
+              if grab:
+                  notes.append(line)
+          text = chr(10).join(notes).strip()
+          if not text:
+              text = "No CHANGELOG.md section found for " + version + "."
+          open("release-notes.md", "w", encoding="utf-8").write(text + chr(10))
+          PY
+      - uses: softprops/action-gh-release@v3
+        with:
+          body_path: release-notes.md

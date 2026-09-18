@@ -1,0 +1,26 @@
+name: Bug report
+description: Incorrect behaviour, an unexpected error, or a scikit-learn compatibility problem.
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: A small Python snippet, with the data or a way to generate it.
+      render: python
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      placeholder: "subspaceknn 0.1.0, scikit-learn 1.6.1, Python 3.13, Windows 11"
+    validations:
+      required: true

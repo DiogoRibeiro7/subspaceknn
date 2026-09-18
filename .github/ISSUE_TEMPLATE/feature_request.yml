@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose a change to the method, the explanations, or the API.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can you not do today, or what is awkward?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Sketch the API or the change to the method.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: How would it be validated?
+      description: Which tests, datasets or contract checks would show it works and does not hurt accuracy or interpretability?
