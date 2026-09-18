@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Complementary selection, the new default (`selection="complementary"`). The ensemble is built by greedy forward selection with replacement on the candidates' out-of-fold probabilities: each step adds the subspace that most reduces the ensemble's class-balanced Brier score, `n_subspaces` caps the number of distinct subspaces, and the weights are vote counts. Across fourteen benchmark datasets it improves mean macro-F1 over ranking subspaces individually by 1.8 to 2.6 points, depending on the subspace sizes and the number of subspaces.
+- Exact leave-one-out out-of-fold probabilities from a single neighbour query per subspace, the new default `cv="loo"`. It is faster than k-fold scoring and needs no random split.
+- Parameters `selection`, `max_votes` and `balance_classes`, and the fitted attribute `selection_path_`, which records the out-of-fold loss after each vote.
+- `benchmarks/run_benchmark.py`, which reproduces the fourteen-dataset benchmark in `docs/benchmark.md`, including an ablation of the two ingredients.
+- References section in the README and method note, starting with Brett Kennedy's ikNN article, which the method builds on.
+
+### Changed
+
+- The ikNN-style behaviour of 0.1.0 is now `selection="ranked"`; `SubspaceKNNClassifier(selection="ranked", cv=5, max_candidates=100)` reproduces the 0.1.0 configuration up to how subspace scores are averaged (next item).
+- Subspace scores are computed on pooled out-of-fold predictions rather than averaged over folds, so any scorer works, including probability-based ones. A splitter passed as `cv` must partition the samples.
+- `max_candidates` defaults to 1000 instead of 100, which the cheaper scoring makes affordable.
+- `weighting` applies to ranked selection only; complementary selection weights by vote counts.
+- Plot panel titles show each subspace's weight next to its score.
+
 ## [0.1.0] - 2026-09-18
 
 ### Added

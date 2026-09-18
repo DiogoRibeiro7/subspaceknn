@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any, Literal, TypeGuard
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.metrics import get_scorer
-from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
 from sklearn.utils.multiclass import check_classification_targets, unique_labels
 from sklearn.utils.validation import check_is_fitted, validate_data
 
@@ -24,25 +24,35 @@ if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
     from sklearn.model_selection import BaseCrossValidator
 
+Selection = Literal["complementary", "ranked"]
 Voting = Literal["soft", "hard"]
 Weighting = Literal["score", "uniform"]
+
+# Smallest decrease of the selection loss that counts as an improvement; it keeps
+# rounding noise from adding votes that change nothing.
+_IMPROVEMENT_TOLERANCE = 1e-12
 
 
 class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     """Weighted vote of k-nearest-neighbour classifiers fitted on small feature subspaces.
 
-    The estimator enumerates every subset of ``subspace_size`` features (or every
-    subset of each size when a sequence of sizes is given), fits a
-    :class:`~sklearn.neighbors.KNeighborsClassifier` on each subset, and scores
-    it by cross-validation on the training data. The ``n_subspaces`` best
-    subspaces then vote on new samples, each weighted by its cross-validated
-    score. Because the members of the ensemble live in spaces of one, two or
-    three features, every prediction can be explained by looking at the
-    neighbourhoods that produced it; see :meth:`explain`.
+    The estimator fits a :class:`~sklearn.neighbors.KNeighborsClassifier` on every
+    subset of ``subspace_size`` features (or every subset of each size when a
+    sequence of sizes is given) and computes each subset's out-of-fold class
+    probabilities on the training data, by exact leave-one-out by default. It then
+    chooses at most ``n_subspaces`` of them to vote on new samples.
 
-    The method generalises the interpretable kNN (ikNN) idea of Brett Kennedy,
-    which uses pairs of features only, to subspaces of any small size. This is
-    an independent implementation that shares no code with the original.
+    The default, complementary selection, builds the ensemble greedily: at every
+    step it adds the subspace that most reduces the class-balanced Brier score of
+    the ensemble's out-of-fold probabilities, allowing a subspace to be added
+    again, and keeps the best ensemble found. A subspace therefore earns its place
+    by what it adds to the others, not by how well it does alone, and its weight is
+    the number of times it was chosen. Ranked selection instead keeps the
+    subspaces with the best individual scores, as ikNN does.
+
+    Because the members of the ensemble live in spaces of one, two or three
+    features, every prediction can be explained by looking at the neighbourhoods
+    that produced it; see :meth:`explain`.
 
     Parameters
     ----------
@@ -52,38 +62,57 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
         Number of features in each subspace. A sequence enumerates subspaces of
         every listed size. Sizes larger than the number of features are ignored.
     n_subspaces : int or None, default=5
-        Number of best-scoring subspaces used for prediction. ``None`` uses every
-        candidate subspace.
-    max_candidates : int or None, default=100
-        Soft cap on the number of candidate subspaces that are cross-validated.
-        When the number of subsets exceeds it, features are first screened by the
-        cross-validated score of their one-dimensional model and only the
-        best-scoring features are combined, as many as keep the candidate count
-        within the cap. ``None`` evaluates every subset, which grows
-        combinatorially with the number of features.
+        Maximum number of distinct subspaces used for prediction, that is, the
+        number of pictures an explanation contains. Complementary selection may
+        use fewer when more would not improve the ensemble. ``None`` removes the
+        limit.
+    selection : {"complementary", "ranked"}, default="complementary"
+        ``"complementary"`` builds the ensemble by greedy forward selection on
+        out-of-fold probabilities, as described above. ``"ranked"`` keeps the
+        ``n_subspaces`` subspaces with the highest individual ``scoring`` and
+        weights them according to ``weighting``.
+    max_votes : int, default=50
+        Number of greedy steps of complementary selection. Each step casts one
+        vote and the best ensemble over all steps is kept, so the weights are
+        multiples of ``1 / n_votes`` for some ``n_votes <= max_votes``. Ignored by
+        ranked selection.
+    balance_classes : bool, default=True
+        Whether the Brier score minimised by complementary selection weights each
+        sample inversely to its class frequency, so that every class counts
+        equally. ``False`` weights samples equally. Ignored by ranked selection.
+    max_candidates : int or None, default=1000
+        Soft cap on the number of candidate subspaces. When the number of subsets
+        exceeds it, features are first screened by the ``scoring`` of their
+        one-dimensional model and only the best-scoring features are combined, as
+        many as keep the candidate count within the cap. ``None`` evaluates every
+        subset, which grows combinatorially with the number of features.
     voting : {"soft", "hard"}, default="soft"
         ``"soft"`` averages the class probabilities of the subspace models,
-        ``"hard"`` averages their one-hot predictions.
+        ``"hard"`` averages their one-hot predictions. Complementary selection
+        optimises whichever of the two is used for prediction.
     weighting : {"score", "uniform"}, default="score"
-        ``"score"`` weights each subspace by its cross-validated score (negative
-        scores are clipped to zero), ``"uniform"`` gives every subspace the same
-        weight.
-    cv : int or cross-validation generator, default=5
-        Cross-validation used to score subspaces. An integer selects stratified
-        k-fold with that many splits, reduced automatically when a class has fewer
-        samples than splits. When the training set is too small to
-        cross-validate at all, the resubstitution score on the training data is
-        used instead.
+        Weights of ranked selection: ``"score"`` weights each subspace by its
+        individual score (negative scores are clipped to zero), ``"uniform"``
+        gives every subspace the same weight. Ignored by complementary selection,
+        whose weights are its vote counts.
+    cv : "loo", int or cross-validation generator, default="loo"
+        How the out-of-fold probabilities are computed. ``"loo"`` is exact
+        leave-one-out, obtained from a single neighbour query per subspace. An
+        integer selects stratified k-fold with that many splits, reduced
+        automatically when a class has fewer samples than splits; a splitter must
+        partition the samples. When the training set is too small for the chosen
+        scheme, the probabilities are computed on the training data itself.
     scoring : str or callable, default="f1_macro"
-        Any scikit-learn scorer. Score-based weighting assumes higher is better
-        and scores are non-negative.
+        Any scikit-learn scorer, evaluated on each subspace's out-of-fold
+        predictions. It screens features, ranks subspaces under ranked selection,
+        and is reported as each subspace's score. Higher must be better.
     knn_weights : {"uniform", "distance"}, default="uniform"
         Neighbour weighting passed to the subspace models.
     metric : str, default="minkowski"
         Distance metric passed to the subspace models.
     n_jobs : int or None, default=None
-        Parallelism for cross-validation, passed to
-        :func:`~sklearn.model_selection.cross_val_score`.
+        Parallelism of the neighbour queries, or of the cross-validation when
+        ``cv`` is not ``"loo"``.
 
     Attributes
     ----------
@@ -97,18 +126,23 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
         Indices of the features retained after screening, all features when no
         screening was necessary.
     feature_screening_scores_ : ndarray of shape (n_features_in_,) or None
-        Cross-validated score of each feature's one-dimensional model, only when
+        Out-of-fold score of each feature's one-dimensional model, only when
         screening took place.
     candidate_subspaces_ : list of tuple of int
-        Every subspace that was cross-validated, in enumeration order.
+        Every subspace that was evaluated, in enumeration order.
     candidate_scores_ : ndarray of shape (n_candidates,)
-        Cross-validated score of each candidate subspace.
+        Out-of-fold score of each candidate subspace on its own.
     subspaces_ : list of tuple of int
-        Subspaces used for prediction, from the best to the worst score.
+        Subspaces used for prediction, from the highest to the lowest weight.
     subspace_scores_ : ndarray of shape (n_selected,)
-        Scores of the selected subspaces.
+        Individual scores of the selected subspaces.
     subspace_weights_ : ndarray of shape (n_selected,)
         Normalised voting weights of the selected subspaces; they sum to one.
+    selection_path_ : list of tuple or None
+        Under complementary selection, one ``(subspace, loss)`` pair per vote of
+        the final ensemble, in the order the votes were added, where ``loss`` is
+        the ensemble's out-of-fold balanced Brier score after that vote. ``None``
+        under ranked selection.
     estimators_ : list of KNeighborsClassifier
         Fitted subspace models, aligned with ``subspaces_``.
     feature_scores_ : ndarray of shape (n_features_in_,)
@@ -133,10 +167,13 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
         n_neighbors: int = 5,
         subspace_size: int | Sequence[int] = 2,
         n_subspaces: int | None = 5,
-        max_candidates: int | None = 100,
+        selection: Selection = "complementary",
+        max_votes: int = 50,
+        balance_classes: bool = True,
+        max_candidates: int | None = 1000,
         voting: Voting = "soft",
         weighting: Weighting = "score",
-        cv: int | BaseCrossValidator = 5,
+        cv: Literal["loo"] | int | BaseCrossValidator = "loo",
         scoring: str | Callable[..., float] = "f1_macro",
         knn_weights: Literal["uniform", "distance"] = "uniform",
         metric: str = "minkowski",
@@ -145,6 +182,9 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
         self.n_neighbors = n_neighbors
         self.subspace_size = subspace_size
         self.n_subspaces = n_subspaces
+        self.selection = selection
+        self.max_votes = max_votes
+        self.balance_classes = balance_classes
         self.max_candidates = max_candidates
         self.voting = voting
         self.weighting = weighting
@@ -157,7 +197,7 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
     # ------------------------------------------------------------------ fitting
 
     def fit(self, X: ArrayLike, y: ArrayLike) -> SubspaceKNNClassifier:
-        """Fit one subspace model per candidate subspace and select the best.
+        """Evaluate every candidate subspace and select the ensemble.
 
         Parameters
         ----------
@@ -184,14 +224,14 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
         self.classes_ = unique_labels(y_arr)
         y_encoded = np.searchsorted(self.classes_, y_arr)
         sizes = self._subspace_sizes(n_features)
-        cv = self._cross_validator(y_encoded)
+        splitter = self._splitter(y_encoded)
 
         features = np.arange(n_features)
         self.feature_screening_scores_: NDArray[np.float64] | None = None
         total = sum(comb(n_features, size) for size in sizes)
         if self.max_candidates is not None and total > self.max_candidates:
             singletons = [(index,) for index in range(n_features)]
-            screening = self._score_subspaces(singletons, X_arr, y_encoded, cv)
+            screening, _ = self._evaluate(singletons, X_arr, y_encoded, splitter, keep=False)
             self.feature_screening_scores_ = screening
             keep = self._n_features_to_keep(sizes, n_features, self.max_candidates)
             features = np.sort(np.argsort(-screening, kind="stable")[:keep])
@@ -199,16 +239,32 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
 
         feature_list = [int(index) for index in features]
         candidates = [combo for size in sizes for combo in combinations(feature_list, size)]
-        scores = self._score_subspaces(candidates, X_arr, y_encoded, cv)
+        scores, votes = self._evaluate(
+            candidates, X_arr, y_encoded, splitter, keep=self.selection == "complementary"
+        )
         self.candidate_subspaces_ = candidates
         self.candidate_scores_ = scores
 
-        order = np.argsort(-scores, kind="stable")
-        if self.n_subspaces is not None:
-            order = order[: self.n_subspaces]
+        if votes is not None:
+            order, weights, path = _complementary_selection(
+                votes,
+                y_encoded,
+                self._sample_weight(y_encoded),
+                budget=self.n_subspaces,
+                max_votes=self.max_votes,
+            )
+            self.selection_path_: list[tuple[tuple[int, ...], float]] | None = [
+                (candidates[index], loss) for index, loss in path
+            ]
+        else:
+            order = np.argsort(-scores, kind="stable")
+            if self.n_subspaces is not None:
+                order = order[: self.n_subspaces]
+            weights = self._ranked_weights(scores[order])
+            self.selection_path_ = None
         self.subspaces_ = [candidates[index] for index in order]
         self.subspace_scores_ = scores[order]
-        self.subspace_weights_ = self._weights(self.subspace_scores_)
+        self.subspace_weights_ = weights
         self.estimators_ = [
             self._make_knn().fit(X_arr[:, list(subspace)], y_encoded)
             for subspace in self.subspaces_
@@ -233,12 +289,30 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
             raise ValueError(
                 f"max_candidates must be None or a positive integer, got {self.max_candidates!r}.",
             )
+        self._check_selection_hyperparameters()
         if self.voting not in ("soft", "hard"):
             raise ValueError(f"voting must be 'soft' or 'hard', got {self.voting!r}.")
+        if (isinstance(self.cv, str) and self.cv != "loo") or (
+            _is_integer(self.cv) and self.cv < 2  # noqa: PLR2004
+        ):
+            raise ValueError(
+                "cv must be 'loo', an integer of at least 2 or a cross-validation "
+                f"splitter, got {self.cv!r}.",
+            )
+
+    def _check_selection_hyperparameters(self) -> None:
+        if self.selection not in ("complementary", "ranked"):
+            raise ValueError(
+                f"selection must be 'complementary' or 'ranked', got {self.selection!r}.",
+            )
+        if not _is_positive_integer(self.max_votes):
+            raise ValueError(f"max_votes must be a positive integer, got {self.max_votes!r}.")
+        if self.balance_classes not in (True, False):
+            raise ValueError(
+                f"balance_classes must be True or False, got {self.balance_classes!r}.",
+            )
         if self.weighting not in ("score", "uniform"):
             raise ValueError(f"weighting must be 'score' or 'uniform', got {self.weighting!r}.")
-        if _is_integer(self.cv) and self.cv < 2:  # noqa: PLR2004
-            raise ValueError(f"cv must be at least 2 when given as an integer, got {self.cv!r}.")
 
     def _requested_sizes(self) -> list[int]:
         value: object = self.subspace_size
@@ -261,11 +335,13 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
             )
         return sizes
 
-    def _cross_validator(self, y_encoded: NDArray[np.intp]) -> BaseCrossValidator | None:
-        """Return the splitter used to score subspaces, or None for resubstitution scoring."""
+    def _splitter(self, y_encoded: NDArray[np.intp]) -> str | BaseCrossValidator | None:
+        """Return "loo", a splitter, or None when only resubstitution is possible."""
+        n_samples = len(y_encoded)
+        if isinstance(self.cv, str):
+            return "loo" if n_samples - 1 >= self.n_neighbors else None
         if not _is_integer(self.cv):
             return self.cv
-        n_samples = len(y_encoded)
         smallest_class = int(np.bincount(y_encoded).min())
         n_splits = min(self.cv, smallest_class)
         if n_splits < 2:  # noqa: PLR2004
@@ -282,46 +358,101 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
             metric=self.metric,
         )
 
-    def _score_subspaces(
+    def _evaluate(
         self,
         subspaces: Sequence[tuple[int, ...]],
         X: NDArray[np.float64],
         y_encoded: NDArray[np.intp],
-        cv: BaseCrossValidator | None,
-    ) -> NDArray[np.float64]:
-        if cv is None:
-            return self._resubstitution_scores(subspaces, X, y_encoded)
-        scores = np.empty(len(subspaces), dtype=np.float64)
-        for position, subspace in enumerate(subspaces):
-            fold_scores = cross_val_score(
-                self._make_knn(),
-                X[:, list(subspace)],
-                y_encoded,
-                cv=cv,
-                scoring=self.scoring,
-                n_jobs=self.n_jobs,
-                error_score="raise",
-            )
-            scores[position] = float(np.mean(fold_scores))
-        return scores
+        splitter: str | BaseCrossValidator | None,
+        *,
+        keep: bool,
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64] | None]:
+        """Score every subspace on its out-of-fold predictions.
 
-    def _resubstitution_scores(
-        self,
-        subspaces: Sequence[tuple[int, ...]],
-        X: NDArray[np.float64],
-        y_encoded: NDArray[np.intp],
-    ) -> NDArray[np.float64]:
-        """Score each subspace on its own training data.
-
-        Used only when the training set is too small to cross-validate.
+        Returns the scores and, when ``keep`` is true, the out-of-fold votes as an
+        array of shape (n_subspaces, n_samples, n_classes): probabilities under
+        soft voting, one-hot predictions under hard voting.
         """
+        n_classes = len(self.classes_)
         scorer = get_scorer(self.scoring)
+        rows = np.arange(len(y_encoded)).reshape(-1, 1)
         scores = np.empty(len(subspaces), dtype=np.float64)
+        votes = (
+            np.empty((len(subspaces), len(y_encoded), n_classes), dtype=np.float64)
+            if keep
+            else None
+        )
         for position, subspace in enumerate(subspaces):
-            X_sub = X[:, list(subspace)]
+            proba = self._out_of_fold_proba(X[:, list(subspace)], y_encoded, splitter)
+            scores[position] = float(
+                scorer(_FixedPredictions(proba), rows, y_encoded),
+            )
+            if votes is not None:
+                votes[position] = (
+                    np.eye(n_classes)[np.argmax(proba, axis=1)] if self.voting == "hard" else proba
+                )
+        return scores, votes
+
+    def _out_of_fold_proba(
+        self,
+        X_sub: NDArray[np.float64],
+        y_encoded: NDArray[np.intp],
+        splitter: str | BaseCrossValidator | None,
+    ) -> NDArray[np.float64]:
+        n_classes = len(self.classes_)
+        if splitter is None:
             model = self._make_knn().fit(X_sub, y_encoded)
-            scores[position] = float(scorer(model, X_sub, y_encoded))
-        return scores
+            return np.asarray(model.predict_proba(X_sub), dtype=np.float64)
+        if isinstance(splitter, str):
+            return self._leave_one_out_proba(X_sub, y_encoded, n_classes)
+        return np.asarray(
+            cross_val_predict(
+                self._make_knn(),
+                X_sub,
+                y_encoded,
+                cv=splitter,
+                method="predict_proba",
+                n_jobs=self.n_jobs,
+            ),
+            dtype=np.float64,
+        )
+
+    def _leave_one_out_proba(
+        self,
+        X_sub: NDArray[np.float64],
+        y_encoded: NDArray[np.intp],
+        n_classes: int,
+    ) -> NDArray[np.float64]:
+        """Return leave-one-out probabilities from a single neighbour query.
+
+        The query leaves each sample out of its own neighbours, which equals
+        refitting the subspace model without that sample, up to how ties between
+        equidistant neighbours are broken.
+        """
+        search = NearestNeighbors(
+            n_neighbors=self.n_neighbors,
+            metric=self.metric,
+            n_jobs=self.n_jobs,
+        ).fit(X_sub)
+        distances, neighbours = search.kneighbors()
+        if self.knn_weights == "distance":
+            # Same convention as scikit-learn: a neighbour at distance zero takes all the weight.
+            with np.errstate(divide="ignore"):
+                weights = 1.0 / distances
+            exact = np.isinf(weights)
+            has_exact = exact.any(axis=1)
+            weights[has_exact] = exact[has_exact]
+        else:
+            weights = np.ones_like(distances)
+        labels = y_encoded[neighbours]
+        proba = np.stack([(weights * (labels == c)).sum(axis=1) for c in range(n_classes)], axis=1)
+        return self._normalise(proba)
+
+    def _sample_weight(self, y_encoded: NDArray[np.intp]) -> NDArray[np.float64]:
+        if not self.balance_classes:
+            return np.ones(len(y_encoded), dtype=np.float64)
+        counts = np.bincount(y_encoded).astype(np.float64)
+        return np.asarray(len(y_encoded) / (len(counts) * counts[y_encoded]), dtype=np.float64)
 
     @staticmethod
     def _n_features_to_keep(sizes: Sequence[int], n_features: int, max_candidates: int) -> int:
@@ -335,7 +466,7 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
                 break
         return keep
 
-    def _weights(self, scores: NDArray[np.float64]) -> NDArray[np.float64]:
+    def _ranked_weights(self, scores: NDArray[np.float64]) -> NDArray[np.float64]:
         if self.weighting == "score":
             clipped = np.clip(scores, 0.0, None)
             if clipped.sum() > 0.0:
@@ -448,7 +579,8 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
                 votes[position] = estimator.predict_proba(X_sub)
         return votes
 
-    def _normalise(self, proba: NDArray[np.float64]) -> NDArray[np.float64]:
+    @staticmethod
+    def _normalise(proba: NDArray[np.float64]) -> NDArray[np.float64]:
         row_sums = proba.sum(axis=1, keepdims=True)
         uniform = np.full_like(proba, 1.0 / proba.shape[1])
         return np.asarray(np.divide(proba, row_sums, out=uniform, where=row_sums > 0))
@@ -458,6 +590,109 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
         if names is None:
             return [f"x{index}" for index in range(self.n_features_in_)]
         return [str(name) for name in names]
+
+
+def _complementary_selection(
+    votes: NDArray[np.float64],
+    y_encoded: NDArray[np.intp],
+    sample_weight: NDArray[np.float64],
+    *,
+    budget: int | None,
+    max_votes: int,
+) -> tuple[NDArray[np.intp], NDArray[np.float64], list[tuple[int, float]]]:
+    """Greedy forward selection, with replacement, of the votes that minimise the Brier score.
+
+    Step ``t`` adds the candidate ``c`` that minimises the weighted Brier score of
+    ``(T + V_c) / t``, where ``T`` is the sum of the votes chosen so far. Once
+    ``budget`` distinct candidates have been chosen, only those can be added
+    again. The best ensemble over all steps is returned; ties go to the candidate
+    enumerated first.
+
+    Writing ``A = T / t - Y``, the loss of candidate ``c`` is, up to division by
+    the total sample weight,
+    ``sum_i s_i |A_i|^2 + (2 / t) <V_c, s A> + (1 / t^2) sum_i s_i |V_c,i|^2``,
+    so each step costs one matrix-vector product over the candidates and never
+    materialises the candidate ensembles.
+
+    Parameters
+    ----------
+    votes : ndarray of shape (n_candidates, n_samples, n_classes)
+        Out-of-fold probabilities (or one-hot predictions) of every candidate.
+    y_encoded : ndarray of shape (n_samples,)
+        Encoded class labels.
+    sample_weight : ndarray of shape (n_samples,)
+        Weights of the samples in the Brier score.
+    budget : int or None
+        Maximum number of distinct candidates.
+    max_votes : int
+        Number of greedy steps.
+
+    Returns
+    -------
+    order : ndarray of int
+        Chosen candidates, by decreasing vote count, ties by first selection.
+    weights : ndarray of float
+        Vote count of each chosen candidate divided by the number of votes.
+    path : list of (int, float)
+        Candidate added and ensemble loss after each vote of the returned ensemble.
+    """
+    n_candidates, n_samples, n_classes = votes.shape
+    onehot = np.eye(n_classes)[y_encoded]
+    total_weight = float(sample_weight.sum())
+    flat = votes.reshape(n_candidates, n_samples * n_classes)
+    squares = np.einsum("kic,kic,i->k", votes, votes, sample_weight)
+
+    counts = np.zeros(n_candidates, dtype=np.intp)
+    running = np.zeros((n_samples, n_classes), dtype=np.float64)
+    steps: list[tuple[int, float]] = []
+    best_loss = np.inf
+    best_step = 0
+    for step in range(1, max_votes + 1):
+        residual = running / step - onehot
+        weighted = sample_weight[:, None] * residual
+        base = float(np.sum(weighted * residual))
+        losses = (base + 2.0 * (flat @ weighted.ravel()) / step + squares / step**2) / total_weight
+        if budget is not None and np.count_nonzero(counts) >= budget:
+            losses[counts == 0] = np.inf
+        pick = int(np.argmin(losses))
+        counts[pick] += 1
+        running += votes[pick]
+        loss = float(losses[pick])
+        steps.append((pick, loss))
+        if loss < best_loss - _IMPROVEMENT_TOLERANCE:
+            best_loss = loss
+            best_step = step
+
+    path = steps[:best_step]
+    final = np.zeros(n_candidates, dtype=np.intp)
+    first_step: dict[int, int] = {}
+    for position, (candidate, _) in enumerate(path):
+        final[candidate] += 1
+        first_step.setdefault(candidate, position)
+    order = np.array(
+        sorted(first_step, key=lambda candidate: (-final[candidate], first_step[candidate])),
+        dtype=np.intp,
+    )
+    weights = final[order] / float(best_step)
+    return order, np.asarray(weights, dtype=np.float64), path
+
+
+class _FixedPredictions(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
+    """Serve precomputed out-of-fold probabilities to a scikit-learn scorer.
+
+    The scorer passes row indices in place of ``X``, so any scorer, whether it
+    needs predictions or probabilities, is evaluated on the out-of-fold values.
+    """
+
+    def __init__(self, probabilities: NDArray[np.float64]) -> None:
+        self.probabilities = probabilities
+        self.classes_ = np.arange(probabilities.shape[1])
+
+    def predict_proba(self, X: NDArray[np.intp]) -> NDArray[np.float64]:
+        return self.probabilities[np.asarray(X, dtype=np.intp).ravel()]
+
+    def predict(self, X: NDArray[np.intp]) -> NDArray[np.intp]:
+        return np.asarray(self.classes_[np.argmax(self.predict_proba(X), axis=1)])
 
 
 def _is_integer(value: object) -> TypeGuard[int]:

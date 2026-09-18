@@ -5,11 +5,13 @@
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://github.com/DiogoRibeiro7/subspaceknn)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Interpretable k-nearest-neighbour classification by ensembling kNN models fitted on low-dimensional feature subspaces.
+Interpretable k-nearest-neighbour classification by complementary selection of low-dimensional feature subspaces.
 
-`SubspaceKNNClassifier` fits one k-nearest-neighbour model per small subset of features, ranks those subspaces by cross-validated performance, and lets the best of them vote, each weighted by its score. Because every member of the ensemble lives in a space of one, two or three features, a prediction can be explained by showing the neighbourhoods that produced it, and each subspace can be drawn with its decision regions.
+`SubspaceKNNClassifier` fits a k-nearest-neighbour model on every small subset of features, one, two or three at a time, and builds a small ensemble of them that votes on new samples. Every member lives in a space that can be drawn, so a prediction is explained by a handful of pictures: which subspaces agreed, which dissented, and where the sample sits among its neighbours in each.
 
-The method generalises the *interpretable kNN* (ikNN) idea of [Brett Kennedy](https://github.com/Brett-Kennedy/ikNN), described in his article [Interpretable kNN (ikNN)](https://towardsdatascience.com/interpretable-knn-iknn-33d38402b8fc), from pairs of features to subspaces of any small size. This package is an independent implementation written from the description of the method. It shares no code, text or results with the original.
+What sets the method apart is how the ensemble is chosen. Instead of keeping the subspaces that score best on their own, which tend to be near-copies of each other, **complementary selection** adds subspaces one vote at a time, each time the one that most improves the ensemble's out-of-fold predictions. Exact leave-one-out predictions, computed from a single neighbour query per subspace, make it cheap to consider up to a thousand candidates. On fourteen benchmark datasets this gains two to three points of macro-F1 over ranking subspaces individually, and with subspaces of up to three features it beats plain kNN in the full feature space on average; see [Does interpretability cost accuracy?](#does-interpretability-cost-accuracy).
+
+The idea of an ensemble of drawable kNN models comes from Brett Kennedy's [interpretable kNN (ikNN)](https://towardsdatascience.com/interpretable-knn-iknn-33d38402b8fc), which ranks pairs of features by their individual accuracy. That ranked scheme is still available as `selection="ranked"`. See [References](#references).
 
 ## Installation
 
@@ -35,8 +37,8 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0, strati
 clf = SubspaceKNNClassifier(subspace_size=(1, 2), n_subspaces=4).fit(X_train, y_train)
 print(clf.score(X_test, y_test))
 
-for subspace, score, weight in zip(clf.subspaces_, clf.subspace_scores_, clf.subspace_weights_):
-    print(list(X.columns[list(subspace)]), f"score={score:.3f}", f"weight={weight:.3f}")
+for subspace, weight in zip(clf.subspaces_, clf.subspace_weights_):
+    print(list(X.columns[list(subspace)]), f"weight={weight:.2f}")
 ```
 
 The estimator follows the scikit-learn contract, so it works inside `Pipeline`, `GridSearchCV` and `cross_val_score`, accepts data frames, and exposes `predict`, `predict_proba` and `score`. Feature scales matter for nearest neighbours, so put a `StandardScaler` in front of it unless the features are already comparable.
@@ -47,10 +49,12 @@ The estimator follows the scikit-learn contract, so it works inside `Pipeline`, 
 explanation = clf.explain(X_test.iloc[:1])[0]
 print(explanation.prediction, explanation.agreement())
 for vote in explanation.votes:
-    print(vote.feature_names, vote.prediction, f"weight={vote.weight:.3f}")
+    print(vote.feature_names, vote.prediction, f"weight={vote.weight:.2f}")
 ```
 
-`explain` returns one `Explanation` per sample. It holds the ensemble prediction and probabilities and one `SubspaceVote` per subspace with the features involved, that subspace's own prediction and probabilities, its cross-validated score and its voting weight. `agreement()` is the total weight of the subspaces that voted for the final prediction, and `to_records()` produces rows ready for `pandas.DataFrame.from_records`.
+`explain` returns one `Explanation` per sample. It holds the ensemble prediction and probabilities and one `SubspaceVote` per subspace with the features involved, that subspace's own prediction and probabilities, its individual score and its voting weight. `agreement()` is the total weight of the subspaces that voted for the final prediction, and `to_records()` produces rows ready for `pandas.DataFrame.from_records`.
+
+`selection_path_` tells why each subspace is in the ensemble: the out-of-fold loss after each vote, in the order the votes were cast.
 
 ### Drawing the subspaces
 
@@ -65,17 +69,20 @@ One panel per subspace: a strip plot with decision intervals for one feature, a 
 
 ## How it works
 
-For subspace sizes `d` in `subspace_size`, the estimator enumerates every `d`-subset of the features, fits a `KNeighborsClassifier` on each subset and scores it with stratified cross-validation on the training data (macro-F1 by default). The `n_subspaces` best subsets form the ensemble. For a new sample the class probabilities are the weighted average of the subspace models' probabilities,
+1. **Candidates.** Every subset of `subspace_size` features is a candidate, in lexicographic order. Above `max_candidates` subsets, features are first screened by the score of their one-dimensional model, and only the best are combined.
+2. **Out-of-fold votes.** For every candidate, one neighbour query that leaves each training sample out of its own neighbours gives its exact leave-one-out class probabilities. Each candidate is also scored on these predictions with `scoring` (macro-F1 by default).
+3. **Complementary selection.** Starting from an empty ensemble, each step adds the candidate that minimises the class-balanced Brier score of the averaged out-of-fold probabilities. A subspace may be added again, which increases its weight. Once `n_subspaces` distinct subspaces are in, only those can be added. After `max_votes` steps the best ensemble seen is kept, and each subspace's weight is its share of the votes.
+4. **Prediction.** The class probabilities are the weighted average of the chosen subspace models' probabilities,
 
-```text
-p(c | x) = sum_s w_s * p_s(c | x),        w_s = score_s / sum_t score_t,
-```
+   ```text
+   p(c | x) = sum_S w_S * p_S(c | x),        w_S = votes_S / total votes,
+   ```
 
-and the prediction is the class with the largest probability. `voting="hard"` replaces `p_s` by the one-hot prediction of each subspace and `weighting="uniform"` replaces `w_s` by equal weights.
+   and the prediction is the class with the largest probability. `voting="hard"` replaces `p_S` by the one-hot prediction of each subspace, both in selection and in prediction.
 
-The number of subsets grows combinatorially with the number of features, so `max_candidates` caps how many are cross-validated. Above the cap, features are screened by the cross-validated score of their one-dimensional model, and only the best-scoring features are combined, as many as keep the candidate count within the cap. Everything is deterministic: subsets are enumerated in lexicographic order and ties keep that order.
+With `selection="ranked"` step 3 is replaced by ikNN-style ranking: the `n_subspaces` best candidates by individual score, weighted by that score or uniformly. Selection does not depend on a random seed: candidates are enumerated in a fixed order, leave-one-out needs no random split, and ties go to the candidate enumerated first. As in scikit-learn's own kNN, which of several equidistant points counts as the k-th neighbour is up to the neighbour search, and it can differ between platforms; on data with many repeated values, such as iris, the chosen subspaces can differ too.
 
-The full description, including how tiny training sets are handled, is in [docs/method.md](docs/method.md).
+The full description, with the reasoning behind each choice, the cost, and the relation to prior work, is in [docs/method.md](docs/method.md).
 
 ## Parameters
 
@@ -83,33 +90,38 @@ The full description, including how tiny training sets are handled, is in [docs/
 | --- | --- | --- |
 | `n_neighbors` | `5` | Neighbours used by every subspace model. |
 | `subspace_size` | `2` | Size of each subspace, or a sequence of sizes to enumerate together. |
-| `n_subspaces` | `5` | Number of best subspaces that vote; `None` uses all candidates. |
-| `max_candidates` | `100` | Cap on cross-validated subspaces; triggers feature screening above it. |
+| `n_subspaces` | `5` | Maximum number of distinct subspaces, that is, pictures; `None` removes the limit. |
+| `selection` | `"complementary"` | `"complementary"` selects greedily for joint performance; `"ranked"` keeps the best individual scores (ikNN). |
+| `max_votes` | `50` | Greedy steps of complementary selection; weights are vote counts over the best number of votes. |
+| `balance_classes` | `True` | Weight classes equally in the Brier score that complementary selection minimises. |
+| `max_candidates` | `1000` | Cap on candidate subspaces; triggers feature screening above it. |
 | `voting` | `"soft"` | `"soft"` averages probabilities, `"hard"` averages one-hot votes. |
-| `weighting` | `"score"` | Weight by cross-validated score, or `"uniform"`. |
-| `cv` | `5` | Folds, or any scikit-learn splitter, used to score subspaces. |
-| `scoring` | `"f1_macro"` | Any scikit-learn scorer; higher must be better. |
+| `weighting` | `"score"` | Ranked selection only: weight by individual score, or `"uniform"`. |
+| `cv` | `"loo"` | Exact leave-one-out, or folds, or any splitter that partitions the samples. |
+| `scoring` | `"f1_macro"` | Any scikit-learn scorer, used for screening, ranking and reporting; higher must be better. |
 | `knn_weights`, `metric` | `"uniform"`, `"minkowski"` | Passed to the subspace models. |
 
-Fitted attributes include `subspaces_`, `subspace_scores_`, `subspace_weights_`, `estimators_`, the full `candidate_subspaces_` with `candidate_scores_`, the `screened_features_`, and `feature_scores_`, a coarse feature-relevance measure. See the class docstring for the complete list.
+Fitted attributes include `subspaces_`, `subspace_weights_`, `subspace_scores_`, `selection_path_`, `estimators_`, the full `candidate_subspaces_` with `candidate_scores_`, the `screened_features_`, and `feature_scores_`, a coarse feature-relevance measure. See the class docstring for the complete list.
 
 ## Does interpretability cost accuracy?
 
-Five-fold stratified cross-validated macro-F1 on scikit-learn's toy datasets, features standardised, everything else at its defaults:
+Macro-F1 under 5-fold stratified cross-validation repeated three times, features standardised, averaged over fourteen datasets: scikit-learn's iris, wine and breast cancer and eleven OpenML datasets. Ranked (0.1.0) is the ikNN-style ranking in this package's first release; kNN uses all features.
 
-| Dataset | kNN | Subspaces of size 2 | Sizes 1, 2 and 3 (8 subspaces) |
+| Setting | kNN | Ranked (0.1.0) | Complementary |
 | --- | ---: | ---: | ---: |
-| iris (4 features) | 0.953 | 0.953 | 0.953 |
-| wine (13 features) | 0.960 | 0.945 | 0.967 |
-| breast cancer (30 features) | 0.962 | 0.946 | 0.943 |
+| pairs, 5 subspaces | 0.785 | 0.762 | 0.780 |
+| pairs, 3 subspaces | 0.785 | 0.757 | 0.777 |
+| sizes 1, 2 and 3, 8 subspaces | 0.785 | 0.772 | **0.798** |
 
-The ensemble stays within a couple of points of plain kNN while every one of its votes is a picture. The test suite asserts this stays true. Details in [docs/benchmark.md](docs/benchmark.md).
+With pairs the ensemble stays within a point of plain kNN while every vote is a scatter plot, and three complementary pairs do better than five ranked ones. With subspaces of up to three features it beats plain kNN on average, on seven datasets out of fourteen, and loses on four. Complementary selection improves on ranking in every setting, and with mixed sizes it is at least as good on every dataset, to within half a point. Per-dataset results, an ablation separating the two ingredients, and fit times are in [docs/benchmark.md](docs/benchmark.md); `benchmarks/run_benchmark.py` reproduces them.
 
 ## Limitations
 
 - Features must be numeric and are used as given; encode categorical features and scale everything first.
-- Candidate subspaces grow as the binomial coefficient of the feature count; rely on `max_candidates` or a sequence of small sizes for wide data.
-- The voting weights are cross-validated scores, not calibrated probabilities. Treat `predict_proba` as a ranking rather than a probability estimate.
+- Candidate subspaces grow as the binomial coefficient of the feature count; rely on `max_candidates` or a sequence of small sizes for wide data. Screening by one-dimensional scores can miss features that only matter in combination.
+- Complementary selection stores every candidate's out-of-fold probabilities, `max_candidates * n_samples * n_classes` floats; lower `max_candidates` for large training sets.
+- Complementary means complementary under probability averaging: a weak but independent signal can lower the averaged Brier score and be left out. See [docs/method.md](docs/method.md#what-complementary-means-here).
+- The voting weights are vote shares, not calibrated probabilities. Treat `predict_proba` as a ranking unless you calibrate it.
 - Classification only.
 
 ## Development
@@ -123,8 +135,17 @@ uv run mypy
 uv run pytest
 ```
 
-The test suite runs scikit-learn's estimator contract (`check_estimator`) against two configurations, plus behavioural, explanation, plotting and benchmark tests. See [CONTRIBUTING.md](CONTRIBUTING.md).
+The test suite runs scikit-learn's estimator contract (`check_estimator`) against three configurations, plus behavioural, explanation, plotting and benchmark tests. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## References
+
+- Kennedy, W. B. (2024, May 14). Interpretable kNN (ikNN). *Towards Data Science*. <https://towardsdatascience.com/interpretable-knn-iknn-33d38402b8fc>. Code: <https://github.com/Brett-Kennedy/ikNN>.
+- Caruana, R., Niculescu-Mizil, A., Crew, G., and Ksikes, A. (2004). Ensemble selection from libraries of models. In *Proceedings of the Twenty-First International Conference on Machine Learning (ICML 2004)*. <https://doi.org/10.1145/1015330.1015432>
+- Bay, S. D. (1998). Combining nearest neighbor classifiers through multiple feature subsets. In *Proceedings of the Fifteenth International Conference on Machine Learning (ICML 1998)*, pp. 37–45.
+- Ho, T. K. (1998). The random subspace method for constructing decision forests. *IEEE Transactions on Pattern Analysis and Machine Intelligence*, 20(8), 832–844.
+- Brier, G. W. (1950). Verification of forecasts expressed in terms of probability. *Monthly Weather Review*, 78(1), 1–3.
+- Cover, T. M., and Hart, P. E. (1967). Nearest neighbor pattern classification. *IEEE Transactions on Information Theory*, 13(1), 21–27.
 
 ## License and attribution
 
-MIT, see [LICENSE](LICENSE). The method is due to Brett Kennedy's ikNN; this implementation, its generalisation to arbitrary subspace sizes, and everything in this repository were written independently.
+MIT, see [LICENSE](LICENSE). The ensemble of drawable kNN models follows Brett Kennedy's ikNN (Kennedy, 2024); complementary selection, the leave-one-out scoring and everything in this repository were written independently and share no code with it.
