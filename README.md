@@ -1,11 +1,14 @@
 # subspaceknn
 
 [![CI](https://github.com/DiogoRibeiro7/subspaceknn/actions/workflows/ci.yml/badge.svg)](https://github.com/DiogoRibeiro7/subspaceknn/actions/workflows/ci.yml)
+[![Docs](https://github.com/DiogoRibeiro7/subspaceknn/actions/workflows/docs.yml/badge.svg)](https://diogoribeiro7.github.io/subspaceknn/)
 [![PyPI](https://img.shields.io/pypi/v/subspaceknn)](https://pypi.org/project/subspaceknn/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://github.com/DiogoRibeiro7/subspaceknn)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Interpretable k-nearest-neighbour classification by complementary selection of low-dimensional feature subspaces.
+
+**Documentation:** <https://diogoribeiro7.github.io/subspaceknn/>
 
 `SubspaceKNNClassifier` fits a k-nearest-neighbour model on every small subset of features, one, two or three at a time, and builds a small ensemble of them that votes on new samples. Every member lives in a space that can be drawn, so a prediction is explained by a handful of pictures: which subspaces agreed, which dissented, and where the sample sits among its neighbours in each.
 
@@ -133,6 +136,7 @@ uv sync --all-extras
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
 uv run pytest
+uv run --group docs mkdocs serve    # documentation at http://127.0.0.1:8000
 ```
 
 The test suite runs scikit-learn's estimator contract (`check_estimator`) against three configurations, plus behavioural, explanation, plotting and benchmark tests. See [CONTRIBUTING.md](CONTRIBUTING.md).

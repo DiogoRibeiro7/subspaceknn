@@ -46,6 +46,7 @@ plot = ["matplotlib>=3.8"]
 Homepage = "https://github.com/DiogoRibeiro7/subspaceknn"
 Repository = "https://github.com/DiogoRibeiro7/subspaceknn"
 Issues = "https://github.com/DiogoRibeiro7/subspaceknn/issues"
+Documentation = "https://diogoribeiro7.github.io/subspaceknn/"
 Changelog = "https://github.com/DiogoRibeiro7/subspaceknn/blob/main/CHANGELOG.md"
 
 [dependency-groups]
@@ -57,6 +58,11 @@ dev = [
   "pytest-cov>=5",
   "ruff>=0.12",
 ]
+docs = [
+  "mkdocs>=1.6.1,<2",
+  "mkdocs-material>=9.7.7",
+  "mkdocstrings[python]>=1.0.6",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/subspaceknn"]
@@ -67,7 +73,7 @@ exclude = ["/.github", "/docs/results", "/examples/output"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-src = ["src", "tests", "examples", "benchmarks"]
+src = ["src", "tests", "examples", "benchmarks", "scripts"]
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -88,6 +94,7 @@ ignore = [
 "tests/**" = ["D", "S101", "PLR2004", "ANN", "INP001", "SLF001", "FBT003", "T201"]
 "examples/**" = ["D", "T201", "INP001", "PLR2004"]
 "benchmarks/**" = ["D", "T201", "INP001"]
+"scripts/**" = ["D", "T201", "INP001"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

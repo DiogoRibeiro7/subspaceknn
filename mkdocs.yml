@@ -1,0 +1,100 @@
+site_name: subspaceknn
+site_description: Interpretable k-nearest-neighbour classification by complementary selection of low-dimensional feature subspaces.
+site_author: Diogo Ribeiro
+site_url: https://diogoribeiro7.github.io/subspaceknn/
+repo_url: https://github.com/DiogoRibeiro7/subspaceknn
+repo_name: DiogoRibeiro7/subspaceknn
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 Diogo Ribeiro, MIT license
+
+nav:
+  - Home: index.md
+  - User guide: guide.md
+  - Method: method.md
+  - Benchmark: benchmark.md
+  - API reference: api.md
+  - Changelog: changelog.md
+  - Contributing: https://github.com/DiogoRibeiro7/subspaceknn/blob/main/CONTRIBUTING.md
+
+# The release checklist is for maintainers and links into the repository.
+exclude_docs: |
+  RELEASING.md
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - content.code.copy
+    - navigation.footer
+    - navigation.top
+    - search.highlight
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          inventories:
+            - https://docs.python.org/3/objects.inv
+            - https://numpy.org/doc/stable/objects.inv
+            - https://scikit-learn.org/stable/objects.inv
+          options:
+            docstring_style: numpy
+            docstring_section_style: table
+            heading_level: 2
+            show_root_heading: true
+            show_root_full_path: false
+            show_source: false
+            show_bases: false
+            members_order: source
+            merge_init_into_class: true
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            filters: ["!^_"]
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+  - pymdownx.superfences
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn

@@ -15,31 +15,42 @@ Two ingredients make this affordable:
 
 ## Notation
 
-- `X` is the training matrix with `n` samples and `p` features, `y` the labels with classes `c = 1, ..., C`, and `Y` the `n x C` one-hot encoding of `y`.
-- A subspace `S` is a subset of feature indices with `|S| = d`.
-- `knn_S` is a `KNeighborsClassifier` on the columns `S` of `X`.
-- `V_S` is the `n x C` matrix of out-of-fold votes of `knn_S`: class probabilities under soft voting, one-hot predictions under hard voting.
-- `s_i` is the weight of sample `i`: `n / (C * n_c)` for a sample of class `c` with `n_c` members when `balance_classes=True`, and `1` otherwise. With balanced weights every class contributes the same total weight.
-- The Brier score of an `n x C` matrix of probabilities `Q` is `B(Q) = sum_i s_i * |Q_i - Y_i|^2 / sum_i s_i`, where `Q_i` is row `i` (Brier, 1950).
+- $X$ is the training matrix with $n$ samples and $p$ features, $y$ the labels with classes $c = 1, \dots, C$, and $Y$ the $n \times C$ one-hot encoding of $y$.
+- A subspace $S$ is a subset of feature indices with $|S| = d$.
+- $\mathrm{knn}_S$ is a `KNeighborsClassifier` on the columns $S$ of $X$.
+- $V_S$ is the $n \times C$ matrix of out-of-fold votes of $\mathrm{knn}_S$: class probabilities under soft voting, one-hot predictions under hard voting.
+- $s_i$ is the weight of sample $i$: $n / (C \, n_c)$ for a sample of class $c$ with $n_c$ members when `balance_classes=True`, and $1$ otherwise. With balanced weights every class contributes the same total weight.
+
+The selection loss is the weighted Brier score (Brier, 1950) of an $n \times C$ matrix of probabilities $Q$ with rows $Q_i$:
+
+$$
+B(Q) = \frac{\sum_i s_i \, \lVert Q_i - Y_i \rVert^2}{\sum_i s_i}.
+$$
 
 ## Algorithm
 
-1. **Enumerate candidates.** For every size `d` in `subspace_size`, list the `d`-subsets of `{1, ..., p}` in lexicographic order. Sizes larger than `p` are skipped; if none fits, fitting fails with an error that names `p`.
-2. **Compute out-of-fold votes.** With `cv="loo"` (the default), query the `k` nearest neighbours of every training sample among the other training samples, in the columns `S`. Row `i` of `V_S` holds the class frequencies among the neighbours of sample `i`, weighted by inverse distance when `knn_weights="distance"`. This equals refitting `knn_S` without sample `i` and predicting it, up to how ties between equidistant neighbours are broken. With an integer or a splitter, `V_S` comes from `cross_val_predict` instead, and the splitter must partition the samples.
-3. **Score candidates.** `score_S` is the configured scorer evaluated on the out-of-fold predictions in `V_S`. Any scikit-learn scorer works, including those that need probabilities.
-4. **Screen features when there are too many candidates.** If the number of subsets exceeds `max_candidates`, score every single feature this way, rank the features (ties keep index order), and keep the largest number `m` of top features such that the number of subsets of those `m` features, summed over the requested sizes, does not exceed the cap. `m` is never smaller than the largest requested size. Candidates are then enumerated over the kept features only.
-5. **Select, complementary (default).** Greedy forward selection with replacement (Caruana et al., 2004) on the balanced Brier score. Start from `T_0 = 0`. At step `t = 1, ..., max_votes`, choose
-
-   ```text
-   S_t = argmin_S  B((T_{t-1} + V_S) / t),        T_t = T_{t-1} + V_{S_t},
-   ```
-
-   where, once `n_subspaces` distinct subspaces have been chosen, `S` ranges over those only. Keep the step `t*` with the lowest loss. The ensemble is the set of subspaces chosen in the first `t*` steps, and the weight of `S` is the number of times it was chosen divided by `t*`. Ties go to the subspace enumerated first.
-6. **Select, ranked (ikNN-style).** With `selection="ranked"`, order candidates by `score_S`, descending, ties keeping enumeration order, and take the first `n_subspaces`. With `weighting="score"`, `w_S = max(score_S, 0) / sum_T max(score_T, 0)`, uniform if every score is zero; with `weighting="uniform"`, `w_S = 1 / n_selected`.
-7. **Fit.** Refit `knn_S` on the whole training set for every selected `S`.
-8. **Predict.** For a sample `x`, `p(c | x) = sum_S w_S * v_S(c | x)`, where `v_S` is the probability vector of `knn_S` under soft voting or its one-hot prediction under hard voting. The prediction is `argmax_c p(c | x)`; ties resolve to the first class in `classes_`. Rows are renormalised defensively so they always sum to one.
+1. **Enumerate candidates.** For every size $d$ in `subspace_size`, list the $d$-subsets of $\{1, \dots, p\}$ in lexicographic order. Sizes larger than $p$ are skipped; if none fits, fitting fails with an error that names $p$.
+2. **Compute out-of-fold votes.** With `cv="loo"` (the default), query the $k$ nearest neighbours of every training sample among the other training samples, in the columns $S$. Row $i$ of $V_S$ holds the class frequencies among the neighbours of sample $i$, weighted by inverse distance when `knn_weights="distance"`. This equals refitting $\mathrm{knn}_S$ without sample $i$ and predicting it, up to how ties between equidistant neighbours are broken. With an integer or a splitter, $V_S$ comes from `cross_val_predict` instead, and the splitter must partition the samples.
+3. **Score candidates.** $\mathrm{score}_S$ is the configured scorer evaluated on the out-of-fold predictions in $V_S$. Any scikit-learn scorer works, including those that need probabilities.
+4. **Screen features when there are too many candidates.** If the number of subsets exceeds `max_candidates`, score every single feature this way, rank the features (ties keep index order), and keep the largest number $m$ of top features such that the number of subsets of those $m$ features, summed over the requested sizes, does not exceed the cap. $m$ is never smaller than the largest requested size. Candidates are then enumerated over the kept features only.
+5. **Select, complementary (default).** Greedy forward selection with replacement (Caruana et al., 2004) on the balanced Brier score, described below.
+6. **Select, ranked (ikNN-style).** With `selection="ranked"`, order candidates by $\mathrm{score}_S$, descending, ties keeping enumeration order, and take the first `n_subspaces`. With `weighting="score"`, $w_S = \max(\mathrm{score}_S, 0) / \sum_T \max(\mathrm{score}_T, 0)$, uniform if every score is zero; with `weighting="uniform"`, every selected subspace gets the same weight.
+7. **Fit.** Refit $\mathrm{knn}_S$ on the whole training set for every selected $S$.
+8. **Predict.** For a sample $x$, the ensemble probabilities are $p(c \mid x) = \sum_S w_S \, v_S(c \mid x)$, where $v_S$ is the probability vector of $\mathrm{knn}_S$ under soft voting or its one-hot prediction under hard voting. The prediction is $\arg\max_c p(c \mid x)$; ties resolve to the first class in `classes_`. Rows are renormalised defensively so they always sum to one.
 
 Because `predict` is defined as the argmax of `predict_proba`, the two are consistent by construction, which scikit-learn's contract checks require.
+
+### Complementary selection
+
+Start from $T_0 = 0$. At step $t = 1, \dots, T_{\max}$, where $T_{\max}$ is `max_votes`, choose
+
+$$
+S_t = \operatorname*{arg\,min}_S \; B\!\left(\frac{T_{t-1} + V_S}{t}\right),
+\qquad
+T_t = T_{t-1} + V_{S_t},
+$$
+
+where, once `n_subspaces` distinct subspaces have been chosen, $S$ ranges over those only. $T_t / t$ is the ensemble after $t$ votes. Keep the step $t^\ast$ with the lowest loss. The ensemble is the set of subspaces chosen in the first $t^\ast$ steps, and the weight of $S$ is the number of times it was chosen divided by $t^\ast$. Ties go to the subspace enumerated first.
 
 ## Design choices
 
@@ -66,8 +77,16 @@ Leave-one-out needs at least `n_neighbors + 1` samples. Cross-validation needs e
 ## Cost
 
 - **Scoring.** One neighbour query of `n` points per candidate, in `d` dimensions, so the fit time grows with the number of candidates more than with `n`. With the defaults, fits on the fourteen benchmark datasets take between a few hundredths of a second and seven seconds, the slowest being qsar-biodeg with 820 candidate pairs; the benchmark note lists every measured time.
-- **Memory.** Complementary selection stores the out-of-fold votes of every candidate: `n_candidates * n * C` floats of eight bytes. A thousand candidates on 5000 samples and three classes take 120 MB. Lower `max_candidates` for large training sets; ranked selection does not store them.
-- **Selection.** `max_votes` matrix-vector products with an `n_candidates x (n * C)` matrix. Writing `A = T_{t-1} / t - Y`, the loss of candidate `S` is, up to the constant factor `1 / sum_i s_i`, `sum_i s_i |A_i|^2 + (2 / t) <V_S, s A> + (1 / t^2) sum_i s_i |V_S,i|^2`. The last term is computed once, so each step needs only the inner products, and the candidate ensembles are never formed.
+- **Memory.** Complementary selection stores the out-of-fold votes of every candidate: $n_{\text{candidates}} \times n \times C$ floats of eight bytes. A thousand candidates on 5000 samples and three classes take 120 MB. Lower `max_candidates` for large training sets; ranked selection does not store them.
+- **Selection.** `max_votes` matrix-vector products with an $n_{\text{candidates}} \times nC$ matrix. Writing $A = T_{t-1} / t - Y$ and $\langle \cdot, \cdot \rangle$ for the sum of elementwise products, the loss of candidate $S$ at step $t$ is, up to the constant factor $1 / \sum_i s_i$,
+
+    $$
+    \sum_i s_i \lVert A_i \rVert^2
+    + \frac{2}{t} \langle V_S, \operatorname{diag}(s) \, A \rangle
+    + \frac{1}{t^2} \sum_i s_i \lVert V_{S,i} \rVert^2 .
+    $$
+
+    The first term is shared by all candidates and the last is computed once per candidate, so each step needs only the inner products, and the candidate ensembles are never formed.
 - **Prediction.** `n_selected` kNN queries in `d` dimensions, which is usually cheaper than one query in `p` dimensions.
 
 ## What the explanation contains

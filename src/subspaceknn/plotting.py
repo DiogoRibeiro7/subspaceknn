@@ -1,8 +1,7 @@
-"""Visualise the subspaces of a fitted :class:`~subspaceknn.SubspaceKNNClassifier`.
+"""Visualise the subspaces of a fitted `SubspaceKNNClassifier`.
 
-This module needs matplotlib, which is an optional dependency::
-
-    pip install "subspaceknn[plot]"
+This module needs matplotlib, an optional dependency installed by
+`pip install "subspaceknn[plot]"`.
 """
 
 from __future__ import annotations

@@ -30,6 +30,7 @@ uv run ruff format --check .
 uv run mypy
 uv run pytest
 uv run python examples/iris_explanations.py
+uv run --group docs mkdocs build --strict
 uv build && uvx twine check dist/*
 ```
 
@@ -38,7 +39,7 @@ Ruff runs with every rule enabled except the few listed in `pyproject.toml`, and
 ## Coding standards
 
 - **scikit-learn contract first.** `__init__` only stores parameters, validation happens in `fit`, fitted state lives in attributes with a trailing underscore, `predict` has no side effects, `predict_proba` and `predict` agree, and invalid input raises an informative `ValueError`. `tests/test_sklearn_compat.py` runs `check_estimator`; a change that breaks it is a bug.
-- **Deterministic by construction.** Subspace enumeration, ranking and tie-breaking are documented in `docs/method.md`; keep them that way and update the note if they change.
+- **No hidden randomness.** Subspace enumeration, selection and tie-breaking are documented in `docs/method.md`; keep them seed-free and update the note if they change.
 - **Explanations are data.** Anything a user needs to understand a prediction belongs in `Explanation` and `SubspaceVote`, not in printed output or plot side effects.
 - **Optional dependencies stay optional.** matplotlib is imported lazily; the core package depends only on numpy and scikit-learn.
 - **Typed and documented.** Public functions have numpy-style docstrings and complete type annotations.
@@ -46,13 +47,17 @@ Ruff runs with every rule enabled except the few listed in `pyproject.toml`, and
 ## Testing standards
 
 - Unit tests for behaviour and validation live in `tests/`; the scikit-learn contract runs against every configuration that changes a code path.
-- Numbers that appear in the documentation come from `tests/test_benchmark.py`. If you change the method, rerun it and update `docs/benchmark.md` and the README table together.
+- Numbers that appear in the documentation come from `benchmarks/run_benchmark.py`, and outputs shown in the user guide from running its code. If you change the method, rerun the benchmark and update `docs/benchmark.md`, the README table and the guide together. `tests/test_benchmark.py` is a smaller, offline check of the same comparison.
 - Keep tests deterministic: fixed seeds, fixed splitters, no network.
 
 ## Documentation
 
+The documentation site is built with [MkDocs](https://www.mkdocs.org/) and [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/) from the Markdown files in `docs/`, and the API reference is generated from the docstrings by [mkdocstrings](https://mkdocstrings.github.io/). `uv run --group docs mkdocs serve` previews it with live reload. Every push to `main` publishes it to GitHub Pages.
+
 - Public API changes need a docstring update and, when user-visible, an entry under *Unreleased* in `CHANGELOG.md`.
+- Docstrings are rendered as Markdown: use backticks for code and `[name][subspaceknn.Object]` to link to another object, not Sphinx roles.
 - Design changes need a corresponding change in `docs/method.md`.
+- `scripts/docs_figures.py` regenerates the figures in `docs/assets/`; rerun it when plotting or the default method changes.
 
 ## Branches, commits and pull requests
 
