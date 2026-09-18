@@ -25,3 +25,6 @@ Thumbs.db
 
 # Example outputs
 examples/output/
+
+# Documentation build
+site/

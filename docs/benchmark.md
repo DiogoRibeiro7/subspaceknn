@@ -6,29 +6,29 @@ Two questions: does complementary selection beat the ikNN-style ranking of subsp
 
 - **Datasets.** Fourteen classification datasets, three from scikit-learn and eleven from OpenML, pinned by data id. Only numeric columns are used, which drops the one categorical column of ilpd.
 
-  | Dataset | Source | Samples | Features | Classes |
-  | --- | --- | ---: | ---: | ---: |
-  | iris | scikit-learn | 150 | 4 | 3 |
-  | wine | scikit-learn | 178 | 13 | 3 |
-  | breast-cancer | scikit-learn | 569 | 30 | 2 |
-  | diabetes | OpenML 37 | 768 | 8 | 2 |
-  | banknote | OpenML 1462 | 1372 | 4 | 2 |
-  | ionosphere | OpenML 59 | 351 | 34 | 2 |
-  | sonar | OpenML 40 | 208 | 60 | 2 |
-  | vehicle | OpenML 54 | 846 | 18 | 4 |
-  | glass | OpenML 41 | 214 | 9 | 6 |
-  | blood-transfusion | OpenML 1464 | 748 | 4 | 2 |
-  | ilpd | OpenML 1480 | 583 | 9 | 2 |
-  | climate-crashes | OpenML 1467 | 540 | 20 | 2 |
-  | segment | OpenML 36 | 2310 | 19 | 7 |
-  | qsar-biodeg | OpenML 1494 | 1055 | 41 | 2 |
+    | Dataset | Source | Samples | Features | Classes |
+    | --- | --- | ---: | ---: | ---: |
+    | iris | scikit-learn | 150 | 4 | 3 |
+    | wine | scikit-learn | 178 | 13 | 3 |
+    | breast-cancer | scikit-learn | 569 | 30 | 2 |
+    | diabetes | OpenML 37 | 768 | 8 | 2 |
+    | banknote | OpenML 1462 | 1372 | 4 | 2 |
+    | ionosphere | OpenML 59 | 351 | 34 | 2 |
+    | sonar | OpenML 40 | 208 | 60 | 2 |
+    | vehicle | OpenML 54 | 846 | 18 | 4 |
+    | glass | OpenML 41 | 214 | 9 | 6 |
+    | blood-transfusion | OpenML 1464 | 748 | 4 | 2 |
+    | ilpd | OpenML 1480 | 583 | 9 | 2 |
+    | climate-crashes | OpenML 1467 | 540 | 20 | 2 |
+    | segment | OpenML 36 | 2310 | 19 | 7 |
+    | qsar-biodeg | OpenML 1494 | 1055 | 41 | 2 |
 
 - **Evaluation.** Macro-F1 under 5-fold stratified cross-validation repeated three times (`RepeatedStratifiedKFold`, `random_state=0`), with a `StandardScaler` fitted inside each training fold.
 - **Models.**
-  - *kNN*: `KNeighborsClassifier()`, five neighbours on all features.
-  - *ranked (0.1.0)*: `SubspaceKNNClassifier(selection="ranked", cv=5, max_candidates=100)`, the ikNN-style ranking with the scoring and candidate cap of the first release.
-  - *ranked, larger pool*: `SubspaceKNNClassifier(selection="ranked")`, the same ranking with leave-one-out scoring and up to 1000 candidates.
-  - *complementary*: `SubspaceKNNClassifier()`, the defaults.
+    - *kNN*: `KNeighborsClassifier()`, five neighbours on all features.
+    - *ranked (0.1.0)*: `SubspaceKNNClassifier(selection="ranked", cv=5, max_candidates=100)`, the ikNN-style ranking with the scoring and candidate cap of the first release.
+    - *ranked, larger pool*: `SubspaceKNNClassifier(selection="ranked")`, the same ranking with leave-one-out scoring and up to 1000 candidates.
+    - *complementary*: `SubspaceKNNClassifier()`, the defaults.
 - **Settings.** Every subspace model is run with pairs and at most five subspaces (the default), pairs and at most three, and subspaces of one, two and three features with at most eight.
 - **Fit time.** One fit of the complementary model with default `n_jobs` on the whole standardised dataset, on a Windows laptop. It is there to give the order of magnitude, not a performance claim.
 

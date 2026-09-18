@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Documentation site built with MkDocs and Material for MkDocs, published to GitHub Pages: a user guide, the method and benchmark notes, an API reference generated from the docstrings, and the changelog.
 - Complementary selection, the new default (`selection="complementary"`). The ensemble is built by greedy forward selection with replacement on the candidates' out-of-fold probabilities: each step adds the subspace that most reduces the ensemble's class-balanced Brier score, `n_subspaces` caps the number of distinct subspaces, and the weights are vote counts. Across fourteen benchmark datasets it improves mean macro-F1 over ranking subspaces individually by 1.8 to 2.6 points, depending on the subspace sizes and the number of subspaces.
 - Exact leave-one-out out-of-fold probabilities from a single neighbour query per subspace, the new default `cv="loo"`. It is faster than k-fold scoring and needs no random split.
 - Parameters `selection`, `max_votes` and `balance_classes`, and the fitted attribute `selection_path_`, which records the out-of-fold loss after each vote.

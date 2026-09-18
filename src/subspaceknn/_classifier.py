@@ -36,7 +36,8 @@ _IMPROVEMENT_TOLERANCE = 1e-12
 class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     """Weighted vote of k-nearest-neighbour classifiers fitted on small feature subspaces.
 
-    The estimator fits a :class:`~sklearn.neighbors.KNeighborsClassifier` on every
+    The estimator fits a
+    [`KNeighborsClassifier`][sklearn.neighbors.KNeighborsClassifier] on every
     subset of ``subspace_size`` features (or every subset of each size when a
     sequence of sizes is given) and computes each subset's out-of-fold class
     probabilities on the training data, by exact leave-one-out by default. It then
@@ -52,7 +53,7 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
 
     Because the members of the ensemble live in spaces of one, two or three
     features, every prediction can be explained by looking at the neighbourhoods
-    that produced it; see :meth:`explain`.
+    that produced it; see [`explain`][subspaceknn.SubspaceKNNClassifier.explain].
 
     Parameters
     ----------
@@ -119,7 +120,7 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
     classes_ : ndarray of shape (n_classes,)
         Class labels.
     n_features_in_ : int
-        Number of features seen during :meth:`fit`.
+        Number of features seen during [`fit`][subspaceknn.SubspaceKNNClassifier.fit].
     feature_names_in_ : ndarray of shape (n_features_in_,)
         Feature names, only when ``X`` had string column names.
     screened_features_ : ndarray of shape (n_screened,)
