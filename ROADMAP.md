@@ -82,6 +82,7 @@ Exit criterion: the fixture job passes on all three operating systems, selection
 
 Goal: fits that are fast and small enough for tens of thousands of samples, and a candidate pool that does not discard interacting features.
 
+- [ ] reduce the overhead of the tie rule, about 1.5 times a plain scikit-learn query on the leave-one-out step for data without repeated values, to at most 1.2 times ([#59](https://github.com/DiogoRibeiro7/subspaceknn/issues/59));
 - [ ] compute the built-in scores (`f1_macro`, `accuracy`, `balanced_accuracy`) directly from the out-of-fold votes with a confusion matrix, and keep the scorer adapter for everything else ([#20](https://github.com/DiogoRibeiro7/subspaceknn/issues/20));
 - [ ] evaluate candidates in parallel over `n_jobs` with threads, since the neighbour queries release the GIL ([#21](https://github.com/DiogoRibeiro7/subspaceknn/issues/21));
 - [ ] store votes compactly: `float32` instead of `float64`, and without the last class column, which follows from the others because every vote sums to one; for two classes that is a quarter of the current memory ([#22](https://github.com/DiogoRibeiro7/subspaceknn/issues/22));

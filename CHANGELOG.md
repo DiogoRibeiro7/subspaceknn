@@ -9,9 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Breaking:** points tied at the distance of the k-th neighbour share the remaining votes, instead of the neighbour search picking some of them. Every subspace model, in `estimators_` and behind the leave-one-out and k-fold votes, is now a `TieSharingKNeighborsClassifier` rather than a `KNeighborsClassifier`. Predictions change wherever such ties occur; BENCHMARK_CHANGE
+- **Breaking:** points tied at the distance of the k-th neighbour share the remaining votes, instead of the neighbour search picking some of them. Every subspace model, in `estimators_` and behind the leave-one-out and k-fold votes, is now a `TieSharingKNeighborsClassifier` rather than a `KNeighborsClassifier`. Predictions change wherever such ties occur. On the fourteen benchmark datasets, mean macro-F1 of the default ensemble moves from 0.780 to 0.777, almost all of it on datasets with many repeated values and imbalanced classes: blood-transfusion 0.598 to 0.579, ilpd 0.565 to 0.552, qsar-biodeg 0.809 to 0.801. A shared vote is the average over every way of breaking the tie, which leans towards the majority class. `docs/benchmark.md` has every dataset.
 - The greedy selection treats losses within 1e-12 of each other as equal and takes the first enumerated candidate among them.
-- The leave-one-out step takes about a quarter longer.
+- Identical training points are stored once, as a cell with a count per class. On data without repeated values the leave-one-out step takes about 1.5 times as long as in 0.2.0.
 
 ### Fixed
 

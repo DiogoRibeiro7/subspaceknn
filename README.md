@@ -12,7 +12,7 @@ Interpretable k-nearest-neighbour classification by complementary selection of l
 
 `SubspaceKNNClassifier` fits a k-nearest-neighbour model on every small subset of features, one, two or three at a time, and builds a small ensemble of them that votes on new samples. Every member lives in a space that can be drawn, so a prediction is explained by a handful of pictures: which subspaces agreed, which dissented, and where the sample sits among its neighbours in each.
 
-What sets the method apart is how the ensemble is chosen. Instead of keeping the subspaces that score best on their own, which tend to be near-copies of each other, **complementary selection** adds subspaces one vote at a time, each time the one that most improves the ensemble's out-of-fold predictions. Exact leave-one-out predictions, computed from a single neighbour query per subspace, make it cheap to consider up to a thousand candidates. On fourteen benchmark datasets this gains two to three points of macro-F1 over ranking subspaces individually, and with subspaces of up to three features it beats plain kNN in the full feature space on average; see [Does interpretability cost accuracy?](#does-interpretability-cost-accuracy).
+What sets the method apart is how the ensemble is chosen. Instead of keeping the subspaces that score best on their own, which tend to be near-copies of each other, **complementary selection** adds subspaces one vote at a time, each time the one that most improves the ensemble's out-of-fold predictions. Exact leave-one-out predictions, computed from a single neighbour query per subspace, make it cheap to consider up to a thousand candidates. On fourteen benchmark datasets this gains about two points of macro-F1 over ranking subspaces individually, and with subspaces of up to three features it beats plain kNN in the full feature space on average; see [Does interpretability cost accuracy?](#does-interpretability-cost-accuracy).
 
 The idea of an ensemble of drawable kNN models comes from Brett Kennedy's [interpretable kNN (ikNN)](https://towardsdatascience.com/interpretable-knn-iknn-33d38402b8fc), which ranks pairs of features by their individual accuracy. That ranked scheme is still available as `selection="ranked"`. See [References](#references).
 
@@ -112,11 +112,11 @@ Macro-F1 under 5-fold stratified cross-validation repeated three times, features
 
 | Setting | kNN | Ranked (0.1.0) | Complementary |
 | --- | ---: | ---: | ---: |
-| pairs, 5 subspaces | 0.785 | 0.762 | 0.780 |
-| pairs, 3 subspaces | 0.785 | 0.757 | 0.777 |
-| sizes 1, 2 and 3, 8 subspaces | 0.785 | 0.772 | **0.798** |
+| pairs, 5 subspaces | 0.785 | 0.760 | 0.777 |
+| pairs, 3 subspaces | 0.785 | 0.755 | 0.774 |
+| sizes 1, 2 and 3, 8 subspaces | 0.785 | 0.772 | **0.795** |
 
-With pairs the ensemble stays within a point of plain kNN while every vote is a scatter plot, and three complementary pairs do better than five ranked ones. With subspaces of up to three features it beats plain kNN on average, on seven datasets out of fourteen, and loses on four. Complementary selection improves on ranking in every setting, and with mixed sizes it is at least as good on every dataset, to within half a point. Per-dataset results, an ablation separating the two ingredients, and fit times are in [docs/benchmark.md](https://diogoribeiro7.github.io/subspaceknn/benchmark/); `benchmarks/run_benchmark.py` reproduces them.
+With pairs the ensemble stays about a point behind plain kNN while every vote is a scatter plot, and three complementary pairs do better than five ranked ones. With subspaces of up to three features it beats plain kNN on average, on seven datasets out of fourteen, and loses on four. Complementary selection improves on ranking in every setting; with mixed sizes it is better on ten datasets and worse on one. Per-dataset results, an ablation separating the two ingredients, and fit times are in [docs/benchmark.md](https://diogoribeiro7.github.io/subspaceknn/benchmark/); `benchmarks/run_benchmark.py` reproduces them.
 
 ## Limitations
 

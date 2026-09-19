@@ -2,15 +2,15 @@
 
 Interpretable k-nearest-neighbour classification by complementary selection of low-dimensional feature subspaces.
 
-![Four panels, one per subspace of a model fitted on iris: a strip plot of petal width with decision intervals, and three scatter plots of feature pairs with decision regions. A star marks the sample being explained in each panel.](assets/iris-subspaces.png)
+![Two panels, one per subspace of a model fitted on iris: a strip plot of petal width with decision intervals, and a scatter plot of sepal length against petal length with decision regions. A star marks the sample being explained in each panel.](assets/iris-subspaces.png)
 
-*The four subspaces of a model fitted on iris, each with its decision regions, its weight in the vote and its score on its own. The star is the sample being explained.*
+*The two subspaces of a model fitted on iris, each with its decision regions, its weight in the vote and its score on its own. The star is the sample being explained.*
 
 `SubspaceKNNClassifier` fits a k-nearest-neighbour model on every small subset of features, one, two or three at a time, and builds a small ensemble of them that votes on new samples. Every member lives in a space that can be drawn, so a prediction is explained by a handful of pictures like the ones above: which subspaces agreed, which dissented, and where the sample sits among its neighbours in each.
 
-What sets the method apart is how the ensemble is chosen. Keeping the subspaces that score best on their own fills the ensemble with near-copies of each other. **Complementary selection** instead adds subspaces one vote at a time, each time the one that most improves the ensemble's out-of-fold predictions. On iris above, the subspace with the second-largest weight has the lowest individual score of the four: it earns its place by being right where petal width alone is unsure.
+What sets the method apart is how the ensemble is chosen. Keeping the subspaces that score best on their own fills the ensemble with near-copies of each other. **Complementary selection** instead adds subspaces one vote at a time, each time the one that most improves the ensemble's out-of-fold predictions. On iris above, the pair on the right has only the fifth-best score of the ten candidates. The three that score higher all contain petal width, which is already in the ensemble, while this pair is right where petal width alone is unsure.
 
-On fourteen benchmark datasets, complementary selection gains two to three points of macro-F1 over ranking subspaces by their own score. With subspaces of up to three features it beats plain kNN on all features on average. The [benchmark](benchmark.md) has the details.
+On fourteen benchmark datasets, complementary selection gains about two points of macro-F1 over ranking subspaces by their own score. With subspaces of up to three features it beats plain kNN on all features on average. The [benchmark](benchmark.md) has the details.
 
 ## Installation
 
