@@ -31,14 +31,16 @@ class TieSharingKNeighborsClassifier(ClassifierMixin, BaseEstimator):  # type: i
     first, and that order depends on the platform. Here, with `d*` the k-th
     smallest distance, every point strictly closer than `d*` gets a full vote and
     the points at exactly `d*` share the remaining votes equally, so the total is
-    still `n_neighbors`. With `weights="distance"` each vote is further
-    divided by the point's distance, and points at distance zero, if there are
-    any, take all the weight.
+    still `n_neighbors`. With `weights="distance"` each vote is further divided by
+    the point's distance, and points at distance zero, if there are any, take all
+    the weight.
 
-    For the Euclidean, Manhattan and Chebyshev metrics, distances are recomputed
-    from the coordinates with operations that round identically on every
-    platform, and ties are equalities of those distances; the neighbour search only
-    proposes candidates. Other metrics use the search's own distances.
+    Training points with identical coordinates are stored once, as a cell with a
+    count per class, so repeated values cost nothing extra. For the Euclidean,
+    Manhattan and Chebyshev metrics, distances are recomputed from the
+    coordinates with operations that round identically on every platform, and
+    ties are equalities of those distances; the neighbour search only proposes
+    candidates. Other metrics use the search's own distances.
 
     This is the model behind every subspace of
     [`SubspaceKNNClassifier`][subspaceknn.SubspaceKNNClassifier].
@@ -69,7 +71,7 @@ class TieSharingKNeighborsClassifier(ClassifierMixin, BaseEstimator):  # type: i
         self.n_jobs = n_jobs
 
     def fit(self, X: ArrayLike, y: ArrayLike) -> TieSharingKNeighborsClassifier:
-        """Store the training data and build the neighbour search.
+        """Store the training data as cells of identical points and build the search.
 
         Parameters
         ----------
@@ -84,9 +86,17 @@ class TieSharingKNeighborsClassifier(ClassifierMixin, BaseEstimator):  # type: i
             The fitted model.
         """
         X_arr = np.ascontiguousarray(X, dtype=np.float64)
-        self.classes_, self._labels = np.unique(np.asarray(y), return_inverse=True)
-        self._X = X_arr
-        self._search = NearestNeighbors(metric=self.metric, n_jobs=self.n_jobs).fit(X_arr)
+        self.classes_, labels = np.unique(np.asarray(y), return_inverse=True)
+        cells, cell_of_row = _group_identical_rows(X_arr)
+        n_classes = len(self.classes_)
+        pairs = cell_of_row * n_classes + labels.reshape(-1)
+        self._counts = np.bincount(pairs, minlength=len(cells) * n_classes).reshape(
+            len(cells), n_classes
+        )
+        self._cells = np.ascontiguousarray(cells)
+        self._pairs = pairs
+        self._n_samples = len(X_arr)
+        self._search = NearestNeighbors(metric=self.metric, n_jobs=self.n_jobs).fit(self._cells)
         self.n_features_in_ = X_arr.shape[1]
         return self
 
@@ -103,7 +113,7 @@ class TieSharingKNeighborsClassifier(ClassifierMixin, BaseEstimator):  # type: i
         ndarray of shape (n_queries, n_classes)
             Vote shares aligned with `classes_`.
         """
-        return self._votes(np.ascontiguousarray(X, dtype=np.float64), None)
+        return self._votes(np.ascontiguousarray(X, dtype=np.float64), None, None)
 
     def predict(self, X: ArrayLike) -> NDArray[Any]:
         """Return the class with the largest vote share; ties go to the first class.
@@ -123,80 +133,85 @@ class TieSharingKNeighborsClassifier(ClassifierMixin, BaseEstimator):  # type: i
     def leave_one_out_proba(self) -> NDArray[np.float64]:
         """Return each training sample's probabilities with the sample left out.
 
-        This equals refitting without each sample and predicting it.
+        This equals refitting without each sample and predicting it. Samples that
+        share a cell and a class have the same answer, so it is computed once per
+        cell and class.
 
         Returns
         -------
         ndarray of shape (n_samples, n_classes)
             Leave-one-out vote shares aligned with `classes_`.
         """
-        return self._votes(self._X, np.arange(len(self._X)))
+        n_classes = len(self.classes_)
+        pairs, pair_of_row = np.unique(self._pairs, return_inverse=True)
+        own_cell = pairs // n_classes
+        proba = self._votes(self._cells[own_cell], own_cell, pairs % n_classes)
+        return np.asarray(proba[pair_of_row.reshape(-1)], dtype=np.float64)
 
     def _votes(
         self,
         queries: NDArray[np.float64],
-        own_rows: NDArray[np.intp] | None,
+        own_cell: NDArray[np.intp] | None,
+        own_class: NDArray[np.intp] | None,
     ) -> NDArray[np.float64]:
-        """Vote shares of `queries`; `own_rows` leaves each query's own row out."""
-        n_train = len(self._X)
+        """Vote shares of `queries`, leaving one point of `own_class` out of `own_cell`."""
         k = self.n_neighbors
-        available = n_train - 1 if own_rows is not None else n_train
+        n_cells = len(self._cells)
+        available = self._n_samples - (own_cell is not None)
         if k > available:
             raise ValueError(
                 f"Expected n_neighbors <= {available} neighbours to choose from, got {k}.",
             )
         proba = np.empty((len(queries), len(self.classes_)), dtype=np.float64)
         pending = np.arange(len(queries))
-        count = min(available, k + 1)
+        count = min(n_cells, k + 1 + (own_cell is not None))
         while pending.size:
             rows = queries[pending]
-            search_distance, index = self._candidates(
-                rows, None if own_rows is None else own_rows[pending], count
+            search_distance, cell = self._search.kneighbors(rows, n_neighbors=count)
+            reduced, distance = self._exact_distances(rows, cell, search_distance)
+            counts = self._counts[cell]
+            if own_cell is not None and own_class is not None:
+                row, column = np.nonzero(cell == own_cell[pending][:, None])
+                counts[row, column, own_class[pending][row]] -= 1
+            # The k-th point by distance: cumulate the cell sizes in distance order.
+            # Which of several equidistant cells comes first does not matter here.
+            order = np.argsort(reduced, axis=1)
+            cumulative = np.cumsum(np.take_along_axis(counts.sum(axis=2), order, axis=1), axis=1)
+            enough = cumulative[:, -1] >= k
+            position = np.take_along_axis(
+                order, np.argmax(cumulative >= k, axis=1)[:, None], axis=1
             )
-            reduced, distance = self._exact_distances(rows, index, search_distance)
-            order = np.lexsort((index, reduced), axis=-1)
-            index = np.take_along_axis(index, order, axis=1)
-            reduced = np.take_along_axis(reduced, order, axis=1)
-            distance = np.take_along_axis(distance, order, axis=1)
-            kth = distance[:, k - 1]
-            farthest = search_distance[:, -1]
-            complete = (count >= available) | (farthest > kth * (1.0 + _COMPLETENESS_MARGIN))
+            boundary = np.take_along_axis(reduced, position, axis=1)
+            boundary_distance = np.take_along_axis(distance, position, axis=1)[:, 0]
+            # Complete when the farthest candidate is clearly beyond the k-th distance,
+            # so no cell outside the list can be tied with it.
+            complete = (count >= n_cells) | (
+                enough & (search_distance[:, -1] > boundary_distance * (1.0 + _COMPLETENESS_MARGIN))
+            )
+            if complete.all():
+                proba[pending] = self._shares(cell, counts, reduced, distance, boundary)
+                break
             proba[pending[complete]] = self._shares(
-                index[complete], reduced[complete], distance[complete]
+                cell[complete],
+                counts[complete],
+                reduced[complete],
+                distance[complete],
+                boundary[complete],
             )
             pending = pending[~complete]
-            count = min(available, 2 * count)
+            count = min(n_cells, 2 * count)
         return proba
-
-    def _candidates(
-        self,
-        rows: NDArray[np.float64],
-        own_rows: NDArray[np.intp] | None,
-        count: int,
-    ) -> tuple[NDArray[np.float64], NDArray[np.intp]]:
-        """Return the `count` nearest training points of each row, sorted by search distance."""
-        if own_rows is None:
-            distance, index = self._search.kneighbors(rows, n_neighbors=count)
-            return distance, index
-        distance, index = self._search.kneighbors(rows, n_neighbors=min(count + 1, len(self._X)))
-        own = index == own_rows[:, None]
-        # With more duplicates of a row than neighbours requested, the row itself may
-        # not be among them; drop the farthest instead, as scikit-learn does.
-        own[~own.any(axis=1), -1] = True
-        keep = ~own
-        shape = (len(rows), keep.shape[1] - 1)
-        return distance[keep].reshape(shape), index[keep].reshape(shape)
 
     def _exact_distances(
         self,
         rows: NDArray[np.float64],
-        index: NDArray[np.intp],
+        cell: NDArray[np.intp],
         search_distance: NDArray[np.float64],
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         """Return a monotone reduced distance, used for ties, and the distance itself."""
         if self.metric not in _SQUARED_METRICS | _ABSOLUTE_METRICS | _MAXIMUM_METRICS:
             return search_distance, search_distance
-        differences = [self._X[index, j] - rows[:, j : j + 1] for j in range(rows.shape[1])]
+        differences = [self._cells[cell, j] - rows[:, j : j + 1] for j in range(rows.shape[1])]
         if self.metric in _SQUARED_METRICS:
             reduced = differences[0] * differences[0]
             for difference in differences[1:]:
@@ -211,28 +226,61 @@ class TieSharingKNeighborsClassifier(ClassifierMixin, BaseEstimator):  # type: i
 
     def _shares(
         self,
-        index: NDArray[np.intp],
+        cell: NDArray[np.intp],
+        counts: NDArray[np.int64],
         reduced: NDArray[np.float64],
         distance: NDArray[np.float64],
+        boundary: NDArray[np.float64],
     ) -> NDArray[np.float64]:
-        """Apply the tie rule to candidates sorted by distance and return vote shares."""
+        """Apply the tie rule to complete candidate lists of cells.
+
+        `counts` holds the number of training points of each class in each
+        candidate cell. Under uniform weights the class totals are exact counts
+        plus a share of the tied counts, which does not depend on any order. Under
+        distance weights each cell adds its count times its weight, summed one cell
+        after another in a canonical order, by distance and then cell, so that the
+        rounding does not depend on the order of the training rows either.
+        """
         k = self.n_neighbors
-        boundary = reduced[:, k - 1 : k]
-        closer = reduced < boundary
-        tied = reduced == boundary
-        share = (k - closer.sum(axis=1, keepdims=True)) / tied.sum(axis=1, keepdims=True)
-        weight = np.where(closer, 1.0, np.where(tied, share, 0.0))
-        if self.weights == "distance":
-            at_zero = reduced == 0.0
+        closer = (reduced < boundary)[:, :, None]
+        tied = (reduced == boundary)[:, :, None]
+        closer_counts = (counts * closer).sum(axis=1)
+        tied_counts = (counts * tied).sum(axis=1)
+        share = (k - closer_counts.sum(axis=1, keepdims=True)) / tied_counts.sum(
+            axis=1, keepdims=True
+        )
+        if self.weights == "uniform":
+            totals = closer_counts + share * tied_counts
+        else:
+            per_point = np.where(closer[:, :, 0], 1.0, np.where(tied[:, :, 0], share, 0.0))
+            occupied = counts.sum(axis=2) > 0
+            at_zero = (reduced == 0.0) & occupied
             with np.errstate(divide="ignore", invalid="ignore"):
-                weighted = weight / distance
-            weight = np.where(at_zero.any(axis=1, keepdims=True), at_zero * 1.0, weighted)
-            weight = np.where(weight > 0.0, weight, 0.0)
-        labels = self._labels[index]
-        totals = np.empty((len(index), len(self.classes_)), dtype=np.float64)
-        for position in range(len(self.classes_)):
-            # Summing each class's weights in sorted order makes the total independent
-            # of the order in which equidistant points were listed.
-            own = np.where(labels == position, weight, 0.0)
-            totals[:, position] = np.sort(own, axis=1).sum(axis=1)
+                weighted = per_point / distance
+            per_point = np.where(at_zero.any(axis=1, keepdims=True), at_zero * 1.0, weighted)
+            # Empty cells, such as a sample's own cell once the sample is left out,
+            # carry no weight; this also clears the infinite weight at distance zero.
+            per_point = np.where(occupied & (per_point > 0.0), per_point, 0.0)
+            order = np.lexsort((cell, reduced), axis=-1)
+            per_point = np.take_along_axis(per_point, order, axis=1)
+            counts = np.take_along_axis(counts, order[:, :, None], axis=1)
+            totals = np.cumsum(counts * per_point[:, :, None], axis=1)[:, -1, :]
         return np.asarray(totals / totals.sum(axis=1, keepdims=True), dtype=np.float64)
+
+
+def _group_identical_rows(
+    X: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], NDArray[np.intp]]:
+    """Return the distinct rows of `X` in lexicographic order and each row's position among them.
+
+    Sorting the columns and comparing neighbours is several times faster than
+    `np.unique(X, axis=0)`, and the order of the distinct rows depends only on their
+    coordinates, not on the order of the rows of `X`.
+    """
+    order = np.lexsort(X.T[::-1])
+    ordered = X[order]
+    starts = np.ones(len(X), dtype=bool)
+    starts[1:] = np.any(ordered[1:] != ordered[:-1], axis=1)
+    cell_of_row = np.empty(len(X), dtype=np.intp)
+    cell_of_row[order] = np.cumsum(starts) - 1
+    return np.ascontiguousarray(ordered[starts]), cell_of_row

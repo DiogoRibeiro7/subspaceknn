@@ -76,5 +76,5 @@ def test_fit_matches_the_committed_fixture(name, expected):
 if __name__ == "__main__":
     FIXTURE.parent.mkdir(exist_ok=True)
     values = {name: fit_case(name) for name in CASES}
-    FIXTURE.write_text(json.dumps(values, indent=1) + "\n", encoding="utf-8")
+    FIXTURE.write_text(json.dumps(values, indent=1) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {FIXTURE}")

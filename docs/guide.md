@@ -68,8 +68,8 @@ vote  7: sepal width (cm), petal width (cm)     loss 0.0714
 
 The search cast 46 votes in total, most of them to reweight the four subspaces, and ended at a loss of 0.0709. The loss is the class-balanced Brier score of the ensemble's leave-one-out probabilities; lower is better. The [method](method.md#complementary-selection) note defines it.
 
-!!! note "Repeated values and platforms"
-    On data with many repeated values, such as iris, several training points are often exactly as far away as the fifth neighbour, and which of them counts follows scikit-learn's neighbour search, which can differ between operating systems. The chosen subspaces can then differ slightly from the ones shown here. See [equidistant neighbours](method.md#design-choices).
+!!! note "Ties between neighbours"
+    Iris is measured to one decimal, so several training points are often exactly as far away as the fifth neighbour. They share the remaining votes instead of one of them being picked, which makes the model, and every output on this page, the same on every platform and for any order of the rows. See [equidistant neighbours](method.md#equidistant-neighbours).
 
 ## Explaining a prediction
 
