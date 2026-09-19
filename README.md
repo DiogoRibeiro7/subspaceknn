@@ -3,7 +3,7 @@
 [![CI](https://github.com/DiogoRibeiro7/subspaceknn/actions/workflows/ci.yml/badge.svg)](https://github.com/DiogoRibeiro7/subspaceknn/actions/workflows/ci.yml)
 [![Docs](https://github.com/DiogoRibeiro7/subspaceknn/actions/workflows/docs.yml/badge.svg)](https://diogoribeiro7.github.io/subspaceknn/)
 [![PyPI](https://img.shields.io/pypi/v/subspaceknn)](https://pypi.org/project/subspaceknn/)
-[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://github.com/DiogoRibeiro7/subspaceknn)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://github.com/DiogoRibeiro7/subspaceknn)
 [![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/DiogoRibeiro7/subspaceknn/blob/main/LICENSE)
 
 Interpretable k-nearest-neighbour classification by complementary selection of low-dimensional feature subspaces.
@@ -23,7 +23,7 @@ pip install subspaceknn            # core: numpy and scikit-learn
 pip install "subspaceknn[plot]"    # adds matplotlib for plot_subspaces
 ```
 
-The package supports Python 3.10 to 3.13 and scikit-learn 1.6 or newer.
+The package supports Python 3.10 to 3.14 and scikit-learn 1.6 or newer; CI tests the oldest versions it allows, numpy 1.26 and scikit-learn 1.6, as well as the newest.
 
 ## Quick start
 
