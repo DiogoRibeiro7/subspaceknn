@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Python 3.14 support, tested in CI on Linux, macOS and Windows.
+- A CI job that installs the lowest versions `pyproject.toml` allows for every direct dependency (numpy 1.26, scikit-learn 1.6) on Python 3.10 and runs the whole test suite.
+- `ROADMAP.md`, also on the documentation site: the milestones to 1.0.0 with exit criteria, measured performance targets and the decisions to take before the API freeze.
+
 ### Changed
 
 - **Breaking:** points tied at the distance of the k-th neighbour share the remaining votes, instead of the neighbour search picking some of them. Every subspace model, in `estimators_` and behind the leave-one-out and k-fold votes, is now a `TieSharingKNeighborsClassifier` rather than a `KNeighborsClassifier`. Predictions change wherever such ties occur. On the fourteen benchmark datasets, mean macro-F1 of the default ensemble moves from 0.780 to 0.777, almost all of it on datasets with many repeated values and imbalanced classes: blood-transfusion 0.598 to 0.579, ilpd 0.565 to 0.552, qsar-biodeg 0.809 to 0.801. A shared vote is the average over every way of breaking the tie, which leans towards the majority class. `docs/benchmark.md` has every dataset.
@@ -17,10 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The fitted model no longer depends on the platform or on the order of the training rows. In 0.2.0, iris with `subspace_size=(1, 2)` selected three subspaces on macOS and four on Linux and Windows. CI now compares fitted models with committed results on all three.
 - The `selection_path_` docstring said the loss was class-balanced whatever `balance_classes` said.
-
-### Added
-
-- `ROADMAP.md`, also on the documentation site: the milestones to 1.0.0 with exit criteria, measured performance targets and the decisions to take before the API freeze.
 
 ## [0.2.0] - 2026-09-18
 
