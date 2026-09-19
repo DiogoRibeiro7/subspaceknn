@@ -71,8 +71,8 @@ The total weight is still $k$, and the vote no longer depends on which tied poin
 - [x] fix the `selection_path_` docstring: the loss is the Brier score weighted as `balance_classes` says ([#15](https://github.com/DiogoRibeiro7/subspaceknn/issues/15));
 - [x] property-based tests with Hypothesis for the invariants: weights sum to one and are multiples of $1/t^\ast$, the budget holds, `predict` is the argmax of `predict_proba`, and selection is invariant to permuting the rows ([#16](https://github.com/DiogoRibeiro7/subspaceknn/issues/16));
 - [x] a CI job that fits the default model on iris, wine, breast cancer and a rounded synthetic dataset on Linux, macOS and Windows and compares `subspaces_`, `subspace_weights_` and `predict_proba` with a committed fixture ([#17](https://github.com/DiogoRibeiro7/subspaceknn/issues/17));
-- [ ] a CI job with the lowest supported versions of numpy and scikit-learn (`uv sync --resolution lowest-direct`) ([#18](https://github.com/DiogoRibeiro7/subspaceknn/issues/18));
-- [ ] add Python 3.14 to CI and the classifiers ([#19](https://github.com/DiogoRibeiro7/subspaceknn/issues/19)).
+- [x] a CI job with the lowest supported versions of numpy and scikit-learn (`uv sync --resolution lowest-direct`) ([#18](https://github.com/DiogoRibeiro7/subspaceknn/issues/18));
+- [x] add Python 3.14 to CI and the classifiers ([#19](https://github.com/DiogoRibeiro7/subspaceknn/issues/19)).
 
 The tie rule changes predictions wherever ties occur, so 0.3.0 is a minor release and the changelog gives the new benchmark numbers, as the versioning policy requires.
 

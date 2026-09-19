@@ -19,7 +19,7 @@ pip install subspaceknn            # core: numpy and scikit-learn
 pip install "subspaceknn[plot]"    # adds matplotlib for plot_subspaces
 ```
 
-The package supports Python 3.10 to 3.13 and scikit-learn 1.6 or newer.
+The package supports Python 3.10 to 3.14 and scikit-learn 1.6 or newer; CI tests the oldest versions it allows, numpy 1.26 and scikit-learn 1.6, as well as the newest.
 
 ## Quick start
 
