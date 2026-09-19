@@ -41,13 +41,11 @@ for subspace, weight, score in zip(clf.subspaces_, clf.subspace_weights_, clf.su
 ```
 
 ```text
-petal width (cm)                       weight 0.67   score 0.956
-sepal length (cm), petal length (cm)   weight 0.22   score 0.929
-sepal width (cm), petal width (cm)     weight 0.09   score 0.947
-petal length (cm), petal width (cm)    weight 0.02   score 0.956
+petal width (cm)                       weight 0.80   score 0.956
+sepal length (cm), petal length (cm)   weight 0.20   score 0.929
 ```
 
-The **score** is how well a subspace predicts on its own, measured on out-of-fold predictions with `scoring` (macro-F1 by default). The **weight** is its share of the ensemble's votes. The two can disagree: sepal length with petal length has the lowest score of the four but the second-largest weight, because it is right where petal width alone is unsure.
+The **score** is how well a subspace predicts on its own, measured on out-of-fold predictions with `scoring` (macro-F1 by default). The **weight** is its share of the ensemble's votes. The two can disagree. Of the ten candidates, sepal length with petal length has only the fifth-best score, yet it is the one chosen next to petal width: the three subspaces that score higher all contain petal width, which is already in the ensemble, while this one is right where petal width alone is unsure. Complementary selection also used only two of the four subspaces allowed, because a third would not have improved the out-of-fold predictions.
 
 `selection_path_` shows how the ensemble was built, one vote at a time, with the out-of-fold loss after each vote:
 
@@ -60,16 +58,14 @@ for vote, (subspace, loss) in enumerate(clf.selection_path_, start=1):
 ```
 
 ```text
-vote  1: petal width (cm)                       loss 0.0752
-vote  2: petal length (cm), petal width (cm)    loss 0.0741
-vote  4: sepal length (cm), petal length (cm)   loss 0.0724
-vote  7: sepal width (cm), petal width (cm)     loss 0.0714
+vote  1: petal width (cm)                       loss 0.0707
+vote  3: sepal length (cm), petal length (cm)   loss 0.0690
 ```
 
-The search cast 46 votes in total, most of them to reweight the four subspaces, and ended at a loss of 0.0709. The loss is the class-balanced Brier score of the ensemble's leave-one-out probabilities; lower is better. The [method](method.md#complementary-selection) note defines it.
+The search reached its best ensemble after five votes, four for petal width and one for the pair, with a loss of 0.0675. The loss is the class-balanced Brier score of the ensemble's leave-one-out probabilities; lower is better. The [method](method.md#complementary-selection) note defines it.
 
-!!! note "Repeated values and platforms"
-    On data with many repeated values, such as iris, several training points are often exactly as far away as the fifth neighbour, and which of them counts follows scikit-learn's neighbour search, which can differ between operating systems. The chosen subspaces can then differ slightly from the ones shown here. See [equidistant neighbours](method.md#design-choices).
+!!! note "Ties between neighbours"
+    Iris is measured to one decimal, so several training points are often exactly as far away as the fifth neighbour. They share the remaining votes instead of one of them being picked, which makes the model, and every output on this page, the same on every platform and for any order of the rows. See [equidistant neighbours](method.md#equidistant-neighbours).
 
 ## Explaining a prediction
 
@@ -85,15 +81,13 @@ print(pd.DataFrame.from_records(explanation.to_records()).round(3).to_string(ind
 ```
 
 ```text
-versicolor 0.76
+versicolor 0.8
                             features  score  weight prediction  agrees  p(setosa)  p(versicolor)  p(virginica)
-                    petal width (cm)  0.956   0.674 versicolor    True        0.0            0.8           0.2
-sepal length (cm), petal length (cm)  0.929   0.217  virginica   False        0.0            0.0           1.0
-  sepal width (cm), petal width (cm)  0.947   0.087 versicolor    True        0.0            1.0           0.0
- petal length (cm), petal width (cm)  0.956   0.022  virginica   False        0.0            0.0           1.0
+                    petal width (cm)  0.956     0.8 versicolor    True        0.0          0.756         0.244
+sepal length (cm), petal length (cm)  0.929     0.2  virginica   False        0.0          0.000         1.000
 ```
 
-This test sample is a virginica that the model calls versicolor, and the explanation shows why. Petal width, which carries two thirds of the weight, puts it among versicolor flowers with four of its five neighbours. Sepal length with petal length is certain it is a virginica, and it is right, but it carries less than a quarter of the weight. `agreement()` is the total weight behind the prediction: 0.76 here, the lowest in this test set. Sorting predictions by agreement is a quick way to find the ones worth a second look.
+This test sample is a virginica that the model calls versicolor, and the explanation shows why. Petal width, which carries four fifths of the weight, places it among versicolor flowers. Its 0.756 is not a multiple of one fifth: several flowers lie exactly as far away as the fifth neighbour, and they share that vote. Sepal length with petal length is certain it is a virginica, and it is right, but it carries a fifth of the weight. `agreement()` is the total weight behind the prediction: 0.8 here, the lowest in this test set. Sorting predictions by agreement is a quick way to find the ones worth a second look.
 
 Each vote also carries its subspace's own probabilities, so uncertainty is visible even when every subspace predicts the same class.
 
@@ -106,7 +100,7 @@ fig = plot_subspaces(clf, X_train, y_train, sample=X_test.iloc[0].to_numpy())
 fig.savefig("subspaces.png")
 ```
 
-![The four subspaces of the iris model, with the first test sample marked by a star.](assets/iris-subspaces.png)
+![The two subspaces of the iris model, with the first test sample marked by a star.](assets/iris-subspaces.png)
 
 There is one panel per subspace, heaviest first: a strip plot with decision intervals for a single feature, a scatter plot with decision regions for a pair, and a 3-D scatter for three features. The title gives the weight and the individual score. `sample` marks the point being explained. The function returns the figure without showing it, and needs the `plot` extra.
 
@@ -116,8 +110,8 @@ The defaults are pairs of features, at most five subspaces, complementary select
 
 | Parameter | Default | When to change it |
 | --- | --- | --- |
-| `subspace_size` | `2` | `(1, 2, 3)` with eight subspaces was the most accurate setting in the benchmark, 0.798 mean macro-F1 against 0.780 for five pairs, at the price of three-dimensional pictures. `(1, 2)` adds single-feature strips, the easiest pictures to read. |
-| `n_subspaces` | `5` | The picture budget. Three pairs averaged 0.777 against 0.780 for five. Complementary selection may use fewer when more would not help. |
+| `subspace_size` | `2` | `(1, 2, 3)` with eight subspaces was the most accurate setting in the benchmark, 0.795 mean macro-F1 against 0.777 for five pairs, at the price of three-dimensional pictures. `(1, 2)` adds single-feature strips, the easiest pictures to read. |
+| `n_subspaces` | `5` | The picture budget. Three pairs averaged 0.774 against 0.777 for five. Complementary selection may use fewer when more would not help. |
 | `max_candidates` | `1000` | Lower it when memory or fit time matters: complementary selection stores the out-of-fold probabilities of every candidate. Above the cap, features are screened by their one-dimensional score. |
 | `n_neighbors` | `5` | Tune it like any kNN, for example with `GridSearchCV`. |
 | `balance_classes` | `True` | Weights classes equally in the selection loss, which suits macro-averaged metrics. `False` weights samples equally, so on imbalanced data the majority class dominates the selection. |

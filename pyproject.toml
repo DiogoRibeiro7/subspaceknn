@@ -51,6 +51,7 @@ Changelog = "https://github.com/DiogoRibeiro7/subspaceknn/blob/main/CHANGELOG.md
 
 [dependency-groups]
 dev = [
+  "hypothesis>=6.168.0",
   "matplotlib>=3.8",
   "mypy>=1.14",
   "pandas>=2.2",

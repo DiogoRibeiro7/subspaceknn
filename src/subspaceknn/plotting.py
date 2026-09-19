@@ -18,9 +18,9 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
     from mpl_toolkits.mplot3d import Axes3D
     from numpy.typing import ArrayLike, NDArray
-    from sklearn.neighbors import KNeighborsClassifier
 
     from subspaceknn._classifier import SubspaceKNNClassifier
+    from subspaceknn._neighbours import TieSharingKNeighborsClassifier
 
 _PALETTE = (
     "tab:blue",
@@ -164,7 +164,7 @@ def _colour(index: int) -> str:
 def _draw_1d(
     ax: Axes,
     *,
-    model: KNeighborsClassifier,
+    model: TieSharingKNeighborsClassifier,
     classes: NDArray[Any],
     X: NDArray[np.float64],
     y: NDArray[Any],
@@ -200,7 +200,7 @@ def _draw_1d(
 def _draw_2d(
     ax: Axes,
     *,
-    model: KNeighborsClassifier | None,
+    model: TieSharingKNeighborsClassifier | None,
     classes: NDArray[Any],
     X: NDArray[np.float64],
     y: NDArray[Any],

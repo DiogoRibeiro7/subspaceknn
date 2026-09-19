@@ -331,30 +331,37 @@ def test_complementary_selection_avoids_redundant_subspaces():
     assert (3,) not in ranked.subspaces_
 
 
+def test_losses_within_the_tolerance_go_to_the_first_candidate():
+    # Candidate 1 is candidate 0 nudged towards the truth on one sample by far less
+    # than the tolerance: the two count as tied, and the first enumerated wins.
+    votes, y = _crafted_votes()
+    votes[1, 5] = [0.5 - 1e-14, 0.5 + 1e-14]
+    order, _, path = _complementary_selection(votes, y, np.ones(len(y)), budget=1, max_votes=3)
+    assert path[0][0] == 0
+    assert order.tolist() == [0]
+
+
+def test_losses_beyond_the_tolerance_are_not_ties():
+    votes, y = _crafted_votes()
+    votes[1, 5] = [0.4, 0.6]
+    order, _, path = _complementary_selection(votes, y, np.ones(len(y)), budget=1, max_votes=3)
+    assert path[0][0] == 1
+    assert order.tolist() == [1]
+
+
+def test_selection_does_not_depend_on_row_order():
+    # Values rounded to one decimal, as in iris, give many equidistant neighbours.
+    X, y = make_classification(n_samples=240, n_features=6, n_informative=4, random_state=5)
+    X = np.round(X, 1)
+    permutation = np.random.default_rng(6).permutation(len(X))
+    first = SubspaceKNNClassifier(subspace_size=(1, 2)).fit(X, y)
+    second = SubspaceKNNClassifier(subspace_size=(1, 2)).fit(X[permutation], y[permutation])
+    assert second.subspaces_ == first.subspaces_
+    assert_array_equal(second.subspace_weights_, first.subspace_weights_)
+    assert_allclose(second.predict_proba(X), first.predict_proba(X), atol=1e-12)
+
+
 # ---------------------------------------------------------- out-of-fold scores
-
-
-@pytest.mark.parametrize("knn_weights", ["uniform", "distance"])
-def test_leave_one_out_equals_refitting_without_each_sample(knn_weights):
-    rng = np.random.default_rng(1)
-    X = rng.normal(size=(30, 2))
-    y = rng.integers(0, 3, size=30)
-    clf = SubspaceKNNClassifier(knn_weights=knn_weights, n_neighbors=4)
-    clf.classes_ = np.arange(3)
-    fast = clf._leave_one_out_proba(X, y, 3)
-    for row in range(30):
-        model = KNeighborsClassifier(n_neighbors=4, weights=knn_weights)
-        model.fit(np.delete(X, row, axis=0), np.delete(y, row))
-        assert_allclose(fast[row], model.predict_proba(X[row : row + 1])[0])
-
-
-def test_leave_one_out_gives_duplicates_all_the_distance_weight():
-    X = np.array([[0.0], [0.0], [1.0], [2.0], [3.0]])
-    y = np.array([1, 1, 0, 0, 0])
-    clf = SubspaceKNNClassifier(knn_weights="distance", n_neighbors=3)
-    clf.classes_ = np.arange(2)
-    proba = clf._leave_one_out_proba(X, y, 2)
-    assert_allclose(proba[0], [0.0, 1.0])
 
 
 def test_candidate_scores_are_leave_one_out_scores():

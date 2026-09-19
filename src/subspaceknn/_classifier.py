@@ -12,11 +12,11 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.metrics import get_scorer
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
-from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
 from sklearn.utils.multiclass import check_classification_targets, unique_labels
 from sklearn.utils.validation import check_is_fitted, validate_data
 
 from subspaceknn._explanation import Explanation, SubspaceVote
+from subspaceknn._neighbours import TieSharingKNeighborsClassifier
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -28,20 +28,22 @@ Selection = Literal["complementary", "ranked"]
 Voting = Literal["soft", "hard"]
 Weighting = Literal["score", "uniform"]
 
-# Smallest decrease of the selection loss that counts as an improvement; it keeps
-# rounding noise from adding votes that change nothing.
-_IMPROVEMENT_TOLERANCE = 1e-12
+# Losses closer than this are treated as equal: a greedy step takes the first
+# enumerated candidate among the equal best, and a vote only counts as an
+# improvement when it lowers the loss by more. Losses are sums over samples whose
+# last bits depend on the summation order, which differs between platforms and
+# row orders; without the tolerance that noise could decide a choice.
+_LOSS_TOLERANCE = 1e-12
 
 
 class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     """Weighted vote of k-nearest-neighbour classifiers fitted on small feature subspaces.
 
-    The estimator fits a
-    [`KNeighborsClassifier`][sklearn.neighbors.KNeighborsClassifier] on every
-    subset of ``subspace_size`` features (or every subset of each size when a
-    sequence of sizes is given) and computes each subset's out-of-fold class
-    probabilities on the training data, by exact leave-one-out by default. It then
-    chooses at most ``n_subspaces`` of them to vote on new samples.
+    The estimator fits a k-nearest-neighbour model on every subset of
+    ``subspace_size`` features (or every subset of each size when a sequence of
+    sizes is given) and computes each subset's out-of-fold class probabilities on
+    the training data, by exact leave-one-out by default. It then chooses at most
+    ``n_subspaces`` of them to vote on new samples.
 
     The default, complementary selection, builds the ensemble greedily: at every
     step it adds the subspace that most reduces the class-balanced Brier score of
@@ -142,10 +144,12 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
     selection_path_ : list of tuple or None
         Under complementary selection, one ``(subspace, loss)`` pair per vote of
         the final ensemble, in the order the votes were added, where ``loss`` is
-        the ensemble's out-of-fold balanced Brier score after that vote. ``None``
-        under ranked selection.
-    estimators_ : list of KNeighborsClassifier
-        Fitted subspace models, aligned with ``subspaces_``.
+        the ensemble's out-of-fold Brier score after that vote, class-balanced
+        when ``balance_classes`` is true. ``None`` under ranked selection.
+    estimators_ : list of TieSharingKNeighborsClassifier
+        Fitted subspace models, aligned with ``subspaces_``. Points tied at the
+        distance of the k-th neighbour share the remaining votes, so predictions
+        do not depend on the order of the training data or on the platform.
     feature_scores_ : ndarray of shape (n_features_in_,)
         Mean score of the selected subspaces containing each feature, zero for
         features that appear in none. A coarse measure of feature relevance.
@@ -352,11 +356,12 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
             return None
         return StratifiedKFold(n_splits=n_splits)
 
-    def _make_knn(self) -> KNeighborsClassifier:
-        return KNeighborsClassifier(
+    def _make_knn(self) -> TieSharingKNeighborsClassifier:
+        return TieSharingKNeighborsClassifier(
             n_neighbors=self.n_neighbors,
             weights=self.knn_weights,
             metric=self.metric,
+            n_jobs=self.n_jobs,
         )
 
     def _evaluate(
@@ -400,12 +405,10 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
         y_encoded: NDArray[np.intp],
         splitter: str | BaseCrossValidator | None,
     ) -> NDArray[np.float64]:
-        n_classes = len(self.classes_)
         if splitter is None:
-            model = self._make_knn().fit(X_sub, y_encoded)
-            return np.asarray(model.predict_proba(X_sub), dtype=np.float64)
+            return self._make_knn().fit(X_sub, y_encoded).predict_proba(X_sub)
         if isinstance(splitter, str):
-            return self._leave_one_out_proba(X_sub, y_encoded, n_classes)
+            return self._make_knn().fit(X_sub, y_encoded).leave_one_out_proba()
         return np.asarray(
             cross_val_predict(
                 self._make_knn(),
@@ -417,37 +420,6 @@ class SubspaceKNNClassifier(ClassifierMixin, BaseEstimator):  # type: ignore[mis
             ),
             dtype=np.float64,
         )
-
-    def _leave_one_out_proba(
-        self,
-        X_sub: NDArray[np.float64],
-        y_encoded: NDArray[np.intp],
-        n_classes: int,
-    ) -> NDArray[np.float64]:
-        """Return leave-one-out probabilities from a single neighbour query.
-
-        The query leaves each sample out of its own neighbours, which equals
-        refitting the subspace model without that sample, up to how ties between
-        equidistant neighbours are broken.
-        """
-        search = NearestNeighbors(
-            n_neighbors=self.n_neighbors,
-            metric=self.metric,
-            n_jobs=self.n_jobs,
-        ).fit(X_sub)
-        distances, neighbours = search.kneighbors()
-        if self.knn_weights == "distance":
-            # Same convention as scikit-learn: a neighbour at distance zero takes all the weight.
-            with np.errstate(divide="ignore"):
-                weights = 1.0 / distances
-            exact = np.isinf(weights)
-            has_exact = exact.any(axis=1)
-            weights[has_exact] = exact[has_exact]
-        else:
-            weights = np.ones_like(distances)
-        labels = y_encoded[neighbours]
-        proba = np.stack([(weights * (labels == c)).sum(axis=1) for c in range(n_classes)], axis=1)
-        return self._normalise(proba)
 
     def _sample_weight(self, y_encoded: NDArray[np.intp]) -> NDArray[np.float64]:
         if not self.balance_classes:
@@ -606,7 +578,8 @@ def _complementary_selection(
     Step ``t`` adds the candidate ``c`` that minimises the weighted Brier score of
     ``(T + V_c) / t``, where ``T`` is the sum of the votes chosen so far. Once
     ``budget`` distinct candidates have been chosen, only those can be added
-    again. The best ensemble over all steps is returned; ties go to the candidate
+    again. The best ensemble over all steps is returned. Losses within
+    ``_LOSS_TOLERANCE`` of each other count as ties, and ties go to the candidate
     enumerated first.
 
     Writing ``A = T / t - Y``, the loss of candidate ``c`` is, up to division by
@@ -655,12 +628,13 @@ def _complementary_selection(
         losses = (base + 2.0 * (flat @ weighted.ravel()) / step + squares / step**2) / total_weight
         if budget is not None and np.count_nonzero(counts) >= budget:
             losses[counts == 0] = np.inf
-        pick = int(np.argmin(losses))
+        # The first enumerated candidate among those within the tolerance of the best.
+        pick = int(np.flatnonzero(losses <= losses.min() + _LOSS_TOLERANCE)[0])
         counts[pick] += 1
         running += votes[pick]
         loss = float(losses[pick])
         steps.append((pick, loss))
-        if loss < best_loss - _IMPROVEMENT_TOLERANCE:
+        if loss < best_loss - _LOSS_TOLERANCE:
             best_loss = loss
             best_step = step
 

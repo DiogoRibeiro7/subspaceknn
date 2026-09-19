@@ -17,7 +17,7 @@ Two ingredients make this affordable:
 
 - $X$ is the training matrix with $n$ samples and $p$ features, $y$ the labels with classes $c = 1, \dots, C$, and $Y$ the $n \times C$ one-hot encoding of $y$.
 - A subspace $S$ is a subset of feature indices with $|S| = d$.
-- $\mathrm{knn}_S$ is a `KNeighborsClassifier` on the columns $S$ of $X$.
+- $\mathrm{knn}_S$ is a k-nearest-neighbour model on the columns $S$ of $X$ that shares tied votes, described [below](#equidistant-neighbours).
 - $V_S$ is the $n \times C$ matrix of out-of-fold votes of $\mathrm{knn}_S$: class probabilities under soft voting, one-hot predictions under hard voting.
 - $s_i$ is the weight of sample $i$: $n / (C \, n_c)$ for a sample of class $c$ with $n_c$ members when `balance_classes=True`, and $1$ otherwise. With balanced weights every class contributes the same total weight.
 
@@ -30,7 +30,7 @@ $$
 ## Algorithm
 
 1. **Enumerate candidates.** For every size $d$ in `subspace_size`, list the $d$-subsets of $\{1, \dots, p\}$ in lexicographic order. Sizes larger than $p$ are skipped; if none fits, fitting fails with an error that names $p$.
-2. **Compute out-of-fold votes.** With `cv="loo"` (the default), query the $k$ nearest neighbours of every training sample among the other training samples, in the columns $S$. Row $i$ of $V_S$ holds the class frequencies among the neighbours of sample $i$, weighted by inverse distance when `knn_weights="distance"`. This equals refitting $\mathrm{knn}_S$ without sample $i$ and predicting it, up to how ties between equidistant neighbours are broken. With an integer or a splitter, $V_S$ comes from `cross_val_predict` instead, and the splitter must partition the samples.
+2. **Compute out-of-fold votes.** With `cv="loo"` (the default), find the $k$ nearest neighbours of every training sample among the other training samples, in the columns $S$. Row $i$ of $V_S$ holds the class shares of the votes of sample $i$'s neighbours, weighted by inverse distance when `knn_weights="distance"`, with ties at the $k$-th distance shared as described [below](#equidistant-neighbours). This equals refitting $\mathrm{knn}_S$ without sample $i$ and predicting it. With an integer or a splitter, $V_S$ comes from `cross_val_predict` with the same model instead, and the splitter must partition the samples.
 3. **Score candidates.** $\mathrm{score}_S$ is the configured scorer evaluated on the out-of-fold predictions in $V_S$. Any scikit-learn scorer works, including those that need probabilities.
 4. **Screen features when there are too many candidates.** If the number of subsets exceeds `max_candidates`, score every single feature this way, rank the features (ties keep index order), and keep the largest number $m$ of top features such that the number of subsets of those $m$ features, summed over the requested sizes, does not exceed the cap. $m$ is never smaller than the largest requested size. Candidates are then enumerated over the kept features only.
 5. **Select, complementary (default).** Greedy forward selection with replacement (Caruana et al., 2004) on the balanced Brier score, described below.
@@ -50,7 +50,7 @@ S_t = \operatorname*{arg\,min}_S \; B\!\left(\frac{T_{t-1} + V_S}{t}\right),
 T_t = T_{t-1} + V_{S_t},
 $$
 
-where, once `n_subspaces` distinct subspaces have been chosen, $S$ ranges over those only. $T_t / t$ is the ensemble after $t$ votes. Keep the step $t^\ast$ with the lowest loss. The ensemble is the set of subspaces chosen in the first $t^\ast$ steps, and the weight of $S$ is the number of times it was chosen divided by $t^\ast$. Ties go to the subspace enumerated first.
+where, once `n_subspaces` distinct subspaces have been chosen, $S$ ranges over those only. $T_t / t$ is the ensemble after $t$ votes. Keep the step $t^\ast$ with the lowest loss. The ensemble is the set of subspaces chosen in the first $t^\ast$ steps, and the weight of $S$ is the number of times it was chosen divided by $t^\ast$. Losses within $10^{-12}$ of each other count as equal: a step takes the first enumerated subspace among the equal best, and a later step only counts as better when it lowers the loss by more. A loss is a sum over samples whose last bits depend on the order of summation, and that order differs between platforms and between row orders of the same data; the tolerance keeps rounding from deciding a choice.
 
 ## Design choices
 
@@ -64,7 +64,28 @@ where, once `n_subspaces` distinct subspaces have been chosen, $S$ ranges over t
 
 **Why leave-one-out.** Besides being cheaper than k-fold cross-validation for kNN, leave-one-out uses every sample for every candidate and needs no random split, so selection does not depend on a seed.
 
-**Equidistant neighbours.** When several training points lie at exactly the distance of the k-th neighbour, which of them counts is left to scikit-learn's neighbour search, as it is in `KNeighborsClassifier`. The tree that search builds partitions points with the platform's C++ standard library, so the choice, and with it the out-of-fold votes, can differ between operating systems. On data with many repeated values this is common: on iris, rounded to one decimal, more than half of the samples have such a tie at the fifth neighbour in every one-feature subspace, and the selected subspaces differ between Linux and macOS. On continuous data exact ties are rare, so this seldom matters.
+### Equidistant neighbours
+
+A plain kNN keeps the first $k$ points its neighbour search returns, and when several points lie exactly at the distance of the $k$-th neighbour, the search decides which of them count. scikit-learn's tree orders them with the platform's C++ standard library, so the votes, and in 0.2.0 the selected subspaces, could differ between operating systems: on iris, macOS selected three subspaces where Linux and Windows selected four. Data with repeated values, such as measurements rounded to one decimal, has such ties for most samples.
+
+Every subspace model is therefore a `TieSharingKNeighborsClassifier`, which applies a rule that does not depend on the order of the points. With $d^\ast$ the $k$-th smallest distance, $A$ the points strictly closer and $B$ the points at exactly $d^\ast$,
+
+$$
+w_j = 1 \quad (j \in A), \qquad w_j = \frac{k - |A|}{|B|} \quad (j \in B),
+$$
+
+so the votes still total $k$. With `knn_weights="distance"` every weight is further divided by the point's distance, and points at distance zero, if there are any, take all the weight, as in scikit-learn.
+
+Four details make the result identical on every platform and for any order of the training rows, and keep repeated values cheap:
+
+- **Exact distances.** For the Euclidean, Manhattan and Chebyshev metrics, the neighbour search only proposes candidates. Their distances are recomputed from the coordinates with one numpy operation per coordinate, which rounds the same way everywhere, whereas a compiled distance routine may fuse a multiplication and an addition on some processors and change the last bit. Ties are equalities of these recomputed distances. Other metrics use the search's own distances.
+- **Cells.** Training points with identical coordinates are stored once, as a cell with a count per class, and the search runs over the cells. A group of hundreds of identical points, common when features are integer counts, is a single candidate rather than hundreds, and a sample's leave-one-out vote is computed once for all the samples that share its cell and class. Cells are listed in lexicographic order of their coordinates, an order that depends only on the data values.
+- **Complete tie groups.** The search is asked for one cell more than needed to reach $k$ points, and asked again for twice as many for any sample whose farthest candidate is not clearly beyond $d^\ast$, until every cell at $d^\ast$ is in the list.
+- **Order-free totals.** Under uniform weights a class's total is an exact count of its closer points plus the share times its count of tied points. Under distance weights each cell contributes its count times its weight, and the cells are summed one after another in order of distance and then cell, an order that does not depend on the rows.
+
+The same model gives the leave-one-out votes, the k-fold votes and the predictions, so selection and prediction treat ties alike. On data without ties the votes are the same as scikit-learn's. On data without repeated values the leave-one-out step takes about 1.5 times as long as a plain scikit-learn query, measured at 2,000 to 50,000 samples; making it cheaper is part of the [performance work](https://github.com/DiogoRibeiro7/subspaceknn/milestone/2) of the roadmap. A first version without cells widened the search point by point and took more than ten times as long to fit qsar-biodeg, whose features are mostly integer counts.
+
+This settles the implementation decision of the [roadmap](https://github.com/DiogoRibeiro7/subspaceknn/issues/10): the model behind `estimators_` is this package's own rather than `KNeighborsClassifier` with a correction, because the correction would have needed the same machinery and `estimators_` would still have predicted differently from the votes that selected it.
 
 ### What "complementary" means here
 

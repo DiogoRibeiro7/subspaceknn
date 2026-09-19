@@ -64,13 +64,13 @@ $$
 
 The total weight is still $k$, and the vote no longer depends on which tied point the search happens to return first.
 
-- [ ] implement the tie rule for leave-one-out votes, with a radius query at $d^\ast$ to find every tied point ([#11](https://github.com/DiogoRibeiro7/subspaceknn/issues/11));
-- [ ] apply the same rule at prediction time, so that `predict_proba` and the out-of-fold votes describe the same model; decide whether `estimators_` stay `KNeighborsClassifier` objects or become a thin wrapper ([#12](https://github.com/DiogoRibeiro7/subspaceknn/issues/12));
-- [ ] extend the rule to `knn_weights="distance"`, where a point at distance zero already takes all the weight ([#13](https://github.com/DiogoRibeiro7/subspaceknn/issues/13));
-- [ ] break ties between candidates in the greedy search with a tolerance, choosing the first enumerated candidate among those within $10^{-12}$ of the best loss, so that summation order cannot flip a choice ([#14](https://github.com/DiogoRibeiro7/subspaceknn/issues/14));
-- [ ] fix the `selection_path_` docstring: the loss is the Brier score weighted as `balance_classes` says ([#15](https://github.com/DiogoRibeiro7/subspaceknn/issues/15));
-- [ ] property-based tests with Hypothesis for the invariants: weights sum to one and are multiples of $1/t^\ast$, the budget holds, `predict` is the argmax of `predict_proba`, and selection is invariant to permuting the rows ([#16](https://github.com/DiogoRibeiro7/subspaceknn/issues/16));
-- [ ] a CI job that fits the default model on iris, wine, breast cancer and a rounded synthetic dataset on Linux, macOS and Windows and compares `subspaces_`, `subspace_weights_` and `predict_proba` with a committed fixture ([#17](https://github.com/DiogoRibeiro7/subspaceknn/issues/17));
+- [x] implement the tie rule for leave-one-out votes, with a radius query at $d^\ast$ to find every tied point ([#11](https://github.com/DiogoRibeiro7/subspaceknn/issues/11));
+- [x] apply the same rule at prediction time, so that `predict_proba` and the out-of-fold votes describe the same model; decide whether `estimators_` stay `KNeighborsClassifier` objects or become a thin wrapper ([#12](https://github.com/DiogoRibeiro7/subspaceknn/issues/12));
+- [x] extend the rule to `knn_weights="distance"`, where a point at distance zero already takes all the weight ([#13](https://github.com/DiogoRibeiro7/subspaceknn/issues/13));
+- [x] break ties between candidates in the greedy search with a tolerance, choosing the first enumerated candidate among those within $10^{-12}$ of the best loss, so that summation order cannot flip a choice ([#14](https://github.com/DiogoRibeiro7/subspaceknn/issues/14));
+- [x] fix the `selection_path_` docstring: the loss is the Brier score weighted as `balance_classes` says ([#15](https://github.com/DiogoRibeiro7/subspaceknn/issues/15));
+- [x] property-based tests with Hypothesis for the invariants: weights sum to one and are multiples of $1/t^\ast$, the budget holds, `predict` is the argmax of `predict_proba`, and selection is invariant to permuting the rows ([#16](https://github.com/DiogoRibeiro7/subspaceknn/issues/16));
+- [x] a CI job that fits the default model on iris, wine, breast cancer and a rounded synthetic dataset on Linux, macOS and Windows and compares `subspaces_`, `subspace_weights_` and `predict_proba` with a committed fixture ([#17](https://github.com/DiogoRibeiro7/subspaceknn/issues/17));
 - [ ] a CI job with the lowest supported versions of numpy and scikit-learn (`uv sync --resolution lowest-direct`) ([#18](https://github.com/DiogoRibeiro7/subspaceknn/issues/18));
 - [ ] add Python 3.14 to CI and the classifiers ([#19](https://github.com/DiogoRibeiro7/subspaceknn/issues/19)).
 
@@ -82,6 +82,7 @@ Exit criterion: the fixture job passes on all three operating systems, selection
 
 Goal: fits that are fast and small enough for tens of thousands of samples, and a candidate pool that does not discard interacting features.
 
+- [ ] reduce the overhead of the tie rule, about 1.5 times a plain scikit-learn query on the leave-one-out step for data without repeated values, to at most 1.2 times ([#59](https://github.com/DiogoRibeiro7/subspaceknn/issues/59));
 - [ ] compute the built-in scores (`f1_macro`, `accuracy`, `balanced_accuracy`) directly from the out-of-fold votes with a confusion matrix, and keep the scorer adapter for everything else ([#20](https://github.com/DiogoRibeiro7/subspaceknn/issues/20));
 - [ ] evaluate candidates in parallel over `n_jobs` with threads, since the neighbour queries release the GIL ([#21](https://github.com/DiogoRibeiro7/subspaceknn/issues/21));
 - [ ] store votes compactly: `float32` instead of `float64`, and without the last class column, which follows from the others because every vote sums to one; for two classes that is a quarter of the current memory ([#22](https://github.com/DiogoRibeiro7/subspaceknn/issues/22));
@@ -159,7 +160,7 @@ Exit criterion: 0.9.0 has been out for a full cycle without an API change, and e
 | `sample_weight` in `fit` ([#42](https://github.com/DiogoRibeiro7/subspaceknn/issues/42)) | Support fully, support in the selection loss only, or leave out | Support it only if neighbour votes can be weighted consistently with the loss; otherwise leave it out and say so. Half support would make the explanation disagree with the selection. |
 | Parameters that apply to one selection only ([#43](https://github.com/DiogoRibeiro7/subspaceknn/issues/43)) | Keep the flat parameters and warn, or group them per selection strategy | Keep the flat parameters, which grid search handles well, and warn when an ignored one is set. |
 | Missing values during `fit` ([#27](https://github.com/DiogoRibeiro7/subspaceknn/issues/27)) | Prediction only, or fitting too | Prediction only for 1.0. Fitting would need out-of-fold votes on incomplete rows, which changes the selection loss. |
-| Tie rule at prediction time ([#10](https://github.com/DiogoRibeiro7/subspaceknn/issues/10)) | Own implementation, or `KNeighborsClassifier` with a correction | Own implementation behind `estimators_`, if it can keep `kneighbors` available for plotting and explanations. |
+| Tie rule at prediction time ([#10](https://github.com/DiogoRibeiro7/subspaceknn/issues/10)) | Own implementation, or `KNeighborsClassifier` with a correction | Decided: an own implementation, `TieSharingKNeighborsClassifier`, behind `estimators_`; see the method note. |
 | Documentation toolchain ([#44](https://github.com/DiogoRibeiro7/subspaceknn/issues/44)) | MkDocs 1.6 with Material, or Zensical | Decide at M6, when versioned docs are needed and Zensical's maturity can be judged. |
 
 ## After 1.0
