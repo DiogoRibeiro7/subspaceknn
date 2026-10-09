@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/project-logo.png" alt="subspaceknn project logo" width="160" height="160">
+</p>
+
 # subspaceknn
 
 [![CI](https://github.com/DiogoRibeiro7/subspaceknn/actions/workflows/ci.yml/badge.svg)](https://github.com/DiogoRibeiro7/subspaceknn/actions/workflows/ci.yml)
